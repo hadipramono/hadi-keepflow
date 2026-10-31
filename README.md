@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.3.1 — Phase 3.2 Search & Discovery**
+**v1.3.2 — Phase 3.3 Note Organization**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -51,3 +51,7 @@ Adds visible progress reporting for ZIP backup and restore/import. See `CHANGELO
 
 ## v1.3.1 — Phase 3.2
 Adds multi-field, multi-term search, quoted phrases, match highlighting, recent search history, sorting, and combined filters. See `CHANGELOG-v1.3.1-phase-3.2.md` and `SEARCH-DISCOVERY-TEST.md`.
+
+
+## v1.3.2 — Phase 3.3 Note Organization
+Adds multi-note selection and bulk organization actions: move to an existing category, add/remove tags, pin/unpin, and archive/restore. Selection is performed against the current filtered result set; permanent deletion remains an individual action for safety. No backend or data schema changes. See `CHANGELOG-v1.3.2-phase-3.3.md` and `NOTE-ORGANIZATION-TEST.md`.

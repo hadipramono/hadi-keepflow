@@ -187,7 +187,7 @@
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.3.1 • Hybrid Drive
+          Hadi KeepFlow v1.3.2 • Hybrid Drive
         </div>
       </aside>
 
@@ -217,9 +217,32 @@
               <option value="title_asc">Judul A–Z</option>
               <option value="title_desc">Judul Z–A</option>
             </select>
+            <button id="toggle-selection-mode" type="button" aria-pressed="false" class="px-2.5 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-xs text-gray-600 dark:text-gray-300 transition whitespace-nowrap">
+              <i class="fa-regular fa-square-check mr-1"></i><span>Pilih</span>
+            </button>
             <button id="clear-view-filter" type="button" class="hidden text-xs text-blue-600 dark:text-blue-400 hover:underline">Hapus filter</button>
           </div>
         </div>
+
+        <!-- Bulk note organization toolbar -->
+        <section id="bulk-actions-bar" class="hidden max-w-4xl mx-auto mb-4 p-3 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50/80 dark:bg-blue-950/30" aria-label="Aksi untuk catatan terpilih">
+          <div class="flex flex-wrap items-center gap-2">
+            <strong id="bulk-selection-count" class="text-xs text-blue-700 dark:text-blue-300 mr-1">0 dipilih</strong>
+            <button id="select-visible-notes" type="button" class="text-xs px-2.5 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">Pilih yang tampil</button>
+            <button id="clear-note-selection" type="button" class="text-xs px-2.5 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">Batal pilih</button>
+            <span class="hidden sm:block w-px h-6 bg-blue-200 dark:bg-blue-900 mx-1"></span>
+            <label for="bulk-category-select" class="sr-only">Pindahkan ke kategori</label>
+            <select id="bulk-category-select" class="min-w-0 flex-1 sm:flex-none max-w-[170px] text-xs px-2.5 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+              <option value="">Pindah kategori...</option>
+            </select>
+            <button id="bulk-move-category" type="button" class="text-xs px-2.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white">Pindahkan</button>
+            <button id="bulk-add-tags" type="button" class="text-xs px-2.5 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700"><i class="fa-solid fa-tags mr-1"></i>Tambah tag</button>
+            <button id="bulk-remove-tags" type="button" class="text-xs px-2.5 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">Hapus tag</button>
+            <button id="bulk-toggle-pin" type="button" class="text-xs px-2.5 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">Sematkan</button>
+            <button id="bulk-toggle-archive" type="button" class="text-xs px-2.5 py-2 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">Arsipkan</button>
+          </div>
+          <p class="text-[11px] text-blue-600/80 dark:text-blue-300/80 mt-2">Pilih beberapa catatan, lalu terapkan perubahan sekaligus. Penghapusan permanen tetap dilakukan satu per satu.</p>
+        </section>
 
         <!-- Empty state -->
         <div id="notes-empty-state" class="hidden max-w-4xl mx-auto py-14 px-4 text-center bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-700 rounded-2xl">

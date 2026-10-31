@@ -1,4 +1,4 @@
-# Instalasi Hadi KeepFlow v1.2.8
+# Instalasi Hadi KeepFlow
 
 1. Backup seluruh project Apps Script dan export data JSON.
 2. Di editor Apps Script, buat/ganti file server `.gs`: `Code.gs`, `DriveStorage.gs`, `SyncOperations.gs`, `NotesApi.gs`.
@@ -67,3 +67,13 @@ If v1.3.0.1 is already installed, replace only:
 - `AppScripts.html`
 
 No `.gs` file changes are required. Save the project and deploy a new version. Existing notes, sync queue, category state, and backup archives remain compatible. Run `SEARCH-DISCOVERY-TEST.md`.
+
+
+## v1.3.2 — Phase 3.3 Note Organization
+
+If v1.3.1 is already installed, replace only:
+- `Index.html`
+- `AppStyles.html`
+- `AppScripts.html`
+
+No `.gs` file changes or migrations are required. Save the Apps Script project and deploy as a **New version**. Do not clear LocalStorage; existing notes, categories, tags, sync queue, and backup data are preserved. Run `NOTE-ORGANIZATION-TEST.md` after deployment.
