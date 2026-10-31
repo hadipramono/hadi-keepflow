@@ -1,12 +1,26 @@
 /**
- * Hadi KeepFlow v1.1.2
+ * Hadi KeepFlow v1.2.2
  * Google Apps Script backend.
- * Existing storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md
+ * Storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md
+ *
+ * Security rule: existing Drive files may only be changed when their sole
+ * parent is the KeepFlow storage folder or one of its direct category folders.
  */
 
-function getOrCreateSubFolder(parentFolder, folderName) {
+function getUniqueFolderByName(parentFolder, folderName) {
   const folders = parentFolder.getFoldersByName(folderName);
-  return folders.hasNext() ? folders.next() : parentFolder.createFolder(folderName);
+  if (!folders.hasNext()) return null;
+
+  const folder = folders.next();
+  if (folders.hasNext()) {
+    throw new Error('Struktur penyimpanan ambigu: ditemukan lebih dari satu folder "' + folderName + '".');
+  }
+  return folder;
+}
+
+function getOrCreateSubFolder(parentFolder, folderName) {
+  const existing = getUniqueFolderByName(parentFolder, folderName);
+  return existing || parentFolder.createFolder(folderName);
 }
 
 function getStorageFolder() {
@@ -14,6 +28,43 @@ function getStorageFolder() {
   const apps = getOrCreateSubFolder(root, 'apps');
   const keepFlow = getOrCreateSubFolder(apps, 'KeepFlow');
   return getOrCreateSubFolder(keepFlow, 'storage');
+}
+
+/**
+ * Return the file's single parent only if it is inside KeepFlow storage.
+ * The accepted layout is storage/<category>/<file> or storage/<file> (Umum).
+ */
+function assertFileBelongsToStorage(file, storage) {
+  if (!file || file.isTrashed()) {
+    throw new Error('Catatan tidak ditemukan atau sudah berada di sampah.');
+  }
+
+  const parents = file.getParents();
+  if (!parents.hasNext()) {
+    throw new Error('Akses ditolak: file tidak berada di folder penyimpanan KeepFlow.');
+  }
+
+  const parent = parents.next();
+  if (parents.hasNext()) {
+    throw new Error('Akses ditolak: file memiliki lebih dari satu parent Drive.');
+  }
+
+  if (parent.getId() === storage.getId()) return parent;
+
+  if (parent.isTrashed()) {
+    throw new Error('Akses ditolak: folder kategori sudah berada di sampah.');
+  }
+
+  const grandParents = parent.getParents();
+  if (!grandParents.hasNext()) {
+    throw new Error('Akses ditolak: file bukan bagian dari penyimpanan KeepFlow.');
+  }
+  const grandParent = grandParents.next();
+  if (grandParents.hasNext() || grandParent.getId() !== storage.getId()) {
+    throw new Error('Akses ditolak: file bukan bagian dari penyimpanan KeepFlow.');
+  }
+
+  return parent;
 }
 
 function doGet() {
@@ -121,53 +172,80 @@ function buildUniqueFileName(folder, title, excludeId) {
   }
 }
 
-function saveNote(note) {
-  if (!note || typeof note !== 'object') {
+function validateNotePayload(note) {
+  if (!note || typeof note !== 'object' || Array.isArray(note)) {
     throw new Error('Data catatan tidak valid.');
   }
+
+  if (note.title != null && typeof note.title !== 'string') {
+    throw new Error('Judul catatan harus berupa teks.');
+  }
+  if (note.category != null && typeof note.category !== 'string') {
+    throw new Error('Kategori catatan harus berupa teks.');
+  }
+  if (note.content != null && typeof note.content !== 'string') {
+    throw new Error('Isi catatan harus berupa teks.');
+  }
+  if (note.tags != null && !Array.isArray(note.tags)) {
+    throw new Error('Tag catatan tidak valid.');
+  }
+
+  const title = safeName(note.title, 'Catatan Tanpa Judul');
+  const category = safeName(note.category, 'Umum');
+  if (title.length > 180) throw new Error('Judul catatan terlalu panjang (maksimal 180 karakter).');
+  if (category.length > 120) throw new Error('Nama kategori terlalu panjang (maksimal 120 karakter).');
+
+  const content = typeof note.content === 'string' ? note.content : '';
+  if (content.length > 500000) throw new Error('Isi catatan terlalu besar (maksimal 500.000 karakter).');
+
+  const tags = Array.isArray(note.tags) ? note.tags : [];
+  if (tags.length > 50 || tags.some(tag => typeof tag !== 'string' || tag.length > 60)) {
+    throw new Error('Daftar tag tidak valid (maksimal 50 tag, masing-masing 60 karakter).');
+  }
+
+  return { title: title, category: category, content: content, tags: tags };
+}
+
+function saveNote(note) {
+  const validated = validateNotePayload(note);
+  const id = note.id == null ? '' : String(note.id).trim();
+  if (id.length > 200) throw new Error('ID catatan tidak valid.');
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     const storage = getStorageFolder();
-    const category = safeName(note.category, 'Umum');
-    const title = safeName(note.title, 'Catatan Tanpa Judul');
-    const folder = getOrCreateSubFolder(storage, category);
-    const id = String(note.id || '');
     let file = null;
 
-    // Only treat a Drive-looking ID as an existing file ID.
-    if (id && !id.startsWith('temp_') && !id.startsWith('import_')) {
+    // Temporary/import IDs represent local-only notes. Any other supplied ID
+    // must resolve to an existing file owned by this KeepFlow storage tree.
+    const isLocalId = !id || id.startsWith('temp_') || id.startsWith('import_');
+    if (!isLocalId) {
       try {
         file = DriveApp.getFileById(id);
-        if (file.isTrashed()) file = null;
       } catch (e) {
-        file = null;
+        throw new Error('Catatan Drive tidak ditemukan. Operasi dibatalkan.');
       }
+      assertFileBelongsToStorage(file, storage);
     }
 
-    const fileName = buildUniqueFileName(folder, title, file ? file.getId() : null);
+    const folder = getOrCreateSubFolder(storage, validated.category);
+    const fileName = buildUniqueFileName(folder, validated.title, file ? file.getId() : null);
     const now = new Date().toISOString();
     const metadata = {
-      isPinned: Boolean(note.isPinned),
-      isArchived: Boolean(note.isArchived),
-      tags: Array.isArray(note.tags) ? note.tags.filter(t => typeof t === 'string') : [],
+      isPinned: toBoolean(note.isPinned),
+      isArchived: toBoolean(note.isArchived),
+      tags: validated.tags,
       createdAt: note.createdAt || now
     };
-    const body = typeof note.content === 'string' ? note.content : '';
     const fileContent = '---JSON---\n' + JSON.stringify(metadata, null, 2) +
-      '\n---JSON---\n\n' + body;
+      '\n---JSON---\n\n' + validated.content;
 
     if (file) {
-      const parents = file.getParents();
-      if (parents.hasNext()) {
-        const oldParent = parents.next();
-        if (oldParent.getId() !== folder.getId()) {
-          folder.addFile(file);
-          oldParent.removeFile(file);
-        }
-      } else {
+      const oldParent = assertFileBelongsToStorage(file, storage);
+      if (oldParent.getId() !== folder.getId()) {
         folder.addFile(file);
+        oldParent.removeFile(file);
       }
       file.setName(fileName);
       file.setContent(fileContent);
@@ -180,8 +258,8 @@ function saveNote(note) {
       note: {
         id: file.getId(),
         title: fileName.replace(/\.md$/i, ''),
-        content: body,
-        category: category,
+        content: validated.content,
+        category: validated.category,
         isPinned: metadata.isPinned,
         isArchived: metadata.isArchived,
         tags: metadata.tags,
@@ -195,15 +273,24 @@ function saveNote(note) {
 }
 
 function deleteNote(fileId) {
-  const id = String(fileId || '');
+  const id = String(fileId || '').trim();
   if (!id || id.startsWith('temp_') || id.startsWith('import_')) {
     return { status: 'success', deleted: false, message: 'Catatan lokal tidak memiliki file Drive.' };
   }
+  if (id.length > 200) throw new Error('ID catatan tidak valid.');
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const file = DriveApp.getFileById(id);
+    const storage = getStorageFolder();
+    let file;
+    try {
+      file = DriveApp.getFileById(id);
+    } catch (e) {
+      throw new Error('Catatan Drive tidak ditemukan. Operasi penghapusan dibatalkan.');
+    }
+
+    assertFileBelongsToStorage(file, storage);
     file.setTrashed(true);
     return { status: 'success', deleted: true, id: id };
   } finally {
@@ -226,7 +313,7 @@ function deleteNoteFromFile(fileId) {
 function renameCategoryFolder(oldName, newName) {
   const oldCategory = safeName(oldName, '');
   const newCategory = safeName(newName, '');
-  if (!oldCategory || !newCategory) {
+  if (!oldCategory || !newCategory || oldCategory.length > 120 || newCategory.length > 120) {
     return { status: 'error', message: 'Nama kategori tidak valid.' };
   }
   if (oldCategory === 'Umum') {
@@ -237,11 +324,12 @@ function renameCategoryFolder(oldName, newName) {
   lock.waitLock(20000);
   try {
     const storage = getStorageFolder();
-    const folders = storage.getFoldersByName(oldCategory);
-    if (!folders.hasNext()) return { status: 'error', message: 'Folder kategori lama tidak ditemukan.' };
-    const targetFolders = storage.getFoldersByName(newCategory);
-    if (targetFolders.hasNext()) return { status: 'error', message: 'Nama kategori tujuan sudah digunakan.' };
-    folders.next().setName(newCategory);
+    const sourceFolder = getUniqueFolderByName(storage, oldCategory);
+    if (!sourceFolder) return { status: 'error', message: 'Folder kategori lama tidak ditemukan.' };
+    if (getUniqueFolderByName(storage, newCategory)) {
+      return { status: 'error', message: 'Nama kategori tujuan sudah digunakan.' };
+    }
+    sourceFolder.setName(newCategory);
     return { status: 'success' };
   } finally {
     lock.releaseLock();

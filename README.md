@@ -1,29 +1,44 @@
-# Hadi KeepFlow v1.2.1 — Tahap 1.2: Offline & Reconciliation
+# Hadi KeepFlow
 
-Paket ini melanjutkan stabilisasi antrean dengan rekonsiliasi cloud setelah reconnect dan perlindungan data lokal selama pemuatan ulang.
+Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
-## Isi paket
+## Current package
 
-- `Index.html` — frontend dengan Sync Queue dan Offline Reconciliation.
-- `Code.gs` — salinan backend v1.1.3 untuk referensi; tidak perlu diganti pada tahap ini.
-- `INSTALL.md` — petunjuk pemasangan dan rollback.
-- `SYNC-QUEUE-TEST.md` — regression test antrean Tahap 1.1.
-- `OFFLINE-RECONCILIATION-TEST.md` — skenario pengujian reconnect dan rekonsiliasi Tahap 1.2.
-- `TEST-CHECKLIST.md` — checklist pengujian umum.
-- `CHANGELOG-v1.2.0-phase-1.1.md` — riwayat Tahap 1.1.
-- `CHANGELOG-v1.2.0-phase-1.2.md` — ringkasan perubahan Tahap 1.2.
+**v1.2.2 — Tahap 1.3: Backend Security & Data Integrity**
 
-## Arsitektur yang dipertahankan
+### Components
+- `Index.html`: frontend SPA. v1.2.1 frontend with durable sync queue and offline reconciliation.
+- `Code.gs`: Apps Script backend. v1.2.2 ownership checks for Drive update/delete operations.
 
-- Frontend: HTML, Tailwind CSS, Vanilla JavaScript.
-- Backend: Google Apps Script.
-- Penyimpanan: file Markdown di Google Drive.
-- Cache lokal dan antrean: LocalStorage.
+### Storage layout
 
-Struktur folder dan format metadata Markdown di Google Drive tidak diubah.
+```text
+My Drive/
+└── apps/
+    └── KeepFlow/
+        └── storage/
+            ├── Umum/
+            │   └── note.md
+            └── Work/
+                └── project.md
+```
 
-## Validasi yang dilakukan
+Files directly under `storage` are also accepted as notes in category Umum for compatibility with the reader.
 
-- Pemeriksaan sintaks JavaScript inline dengan Node.js: lulus.
-- `Code.gs` tidak berubah dari paket Tahap 1.1.
-- Belum diuji langsung pada browser, deployment Apps Script, atau Google Drive pengguna; ikuti checklist manual sebelum pemakaian rutin.
+## Main safeguards
+- Pending sync operations retain immutable payload snapshots.
+- Reconnect triggers cloud baseline reconciliation.
+- Local pending saves/deletes are preserved during reconciliation.
+- Backend verifies a file's Drive parent chain before update or delete.
+- Missing nonlocal IDs and ambiguous folder structures are rejected instead of silently creating or mutating files.
+- Drive mutations use `LockService`.
+
+## Installation
+See `INSTALL.md`. Run all three test guides after deployment:
+- `SYNC-QUEUE-TEST.md`
+- `OFFLINE-RECONCILIATION-TEST.md`
+- `BACKEND-SECURITY-TEST.md`
+
+## Important limitations
+- No cross-device version/ETag conflict detection yet.
+- Browser, Apps Script deployment, and live Google Drive validation must be completed by the project owner.
