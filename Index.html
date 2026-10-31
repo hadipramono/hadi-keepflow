@@ -221,7 +221,7 @@
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.0 • Hybrid Drive
+          Hadi KeepFlow v1.1 • Hybrid Drive
         </div>
       </aside>
 
@@ -388,69 +388,179 @@
       if (loader) loader.classList.add('opacity-0', 'pointer-events-none');
     }
 
-    function loadInitialData() {
-      showLoader('Memuat data Hadi KeepFlow...');
-      
-      const localData = localStorage.getItem(LOCAL_KEY);
-      if (localData) {
-        try {
-          notes = JSON.parse(localData);
-        } catch(e) { notes = []; }
-      }
-      render();
-      hideLoader();
+    const QUEUE_KEY = 'hadi_keepflow_pending_v1';
+    let pendingOperations = [];
+    let syncRunning = false;
+    let serverReady = false;
+    let lastServerIds = new Set();
 
-      if (navigator.onLine && typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(function(serverData) {
-            if (Array.isArray(serverData) && serverData.length > 0) {
-              notes = serverData;
-              localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
-              render();
-            }
-          })
-          .getNotes();
+    function readQueue() {
+      try {
+        const value = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+        pendingOperations = Array.isArray(value) ? value : [];
+      } catch (e) {
+        pendingOperations = [];
       }
     }
 
-    function syncToBackend() {
-      const statusEl = document.getElementById('sync-status');
+    function persistLocal() {
       localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
+      localStorage.setItem(QUEUE_KEY, JSON.stringify(pendingOperations));
+    }
 
-      if (!navigator.onLine) {
-        if (statusEl) {
-          statusEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-500"></i><span>Offline - Tersimpan di LocalStorage</span>';
-        }
+    function setSyncStatus(message, icon = 'fa-cloud', color = 'text-gray-400') {
+      const el = document.getElementById('sync-status');
+      if (el) el.innerHTML = `<i class="fa-solid ${icon} ${color}"></i><span>${escapeHTML(message)}</span>`;
+    }
+
+    function enqueueOperation(type, noteOrId) {
+      const id = type === 'delete' ? String(noteOrId) : String(noteOrId.id);
+      // Coalesce pending operations for the same note; the latest action wins.
+      const protectedHead = syncRunning ? pendingOperations.slice(0, 1) : [];
+      const remaining = syncRunning ? pendingOperations.slice(1) : pendingOperations;
+      pendingOperations = protectedHead.concat(remaining.filter(op => String(op.id) !== id));
+      pendingOperations.push(type === 'delete'
+        ? { type, id, queuedAt: new Date().toISOString() }
+        : { type: 'save', id, note: { ...noteOrId }, queuedAt: new Date().toISOString() });
+      persistLocal();
+      flushPendingOperations();
+    }
+
+    function replaceTemporaryId(oldId, savedNote) {
+      notes = notes.map(n => String(n.id) === String(oldId) ? { ...n, id: savedNote.id } : n);
+      pendingOperations = pendingOperations.map(op => {
+        if (String(op.id) !== String(oldId)) return op;
+        if (op.type === 'delete') return { ...op, id: savedNote.id };
+        return { ...op, id: savedNote.id, note: { ...savedNote } };
+      });
+      persistLocal();
+      render();
+    }
+
+    function flushPendingOperations() {
+      if (syncRunning || !navigator.onLine ||
+          typeof google === 'undefined' || !google.script || !google.script.run) {
+        if (!navigator.onLine) setSyncStatus('Offline - perubahan masuk antrean', 'fa-triangle-exclamation', 'text-amber-500');
         return;
       }
 
-      if (statusEl) {
-        statusEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-blue-500"></i><span>Menyinkronkan ke Google Drive...</span>';
+      if (!pendingOperations.length) {
+        setSyncStatus('Tersinkron dengan Google Drive', 'fa-cloud', 'text-green-500');
+        return;
       }
 
-      if (typeof google !== 'undefined' && google.script && google.script.run) {
-        google.script.run
-          .withSuccessHandler(function(response) {
-            if (response && response.notes) {
-              notes = response.notes;
-              localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
-              render();
-            }
-            if (statusEl) {
-              statusEl.innerHTML = '<i class="fa-solid fa-cloud text-green-500"></i><span>Tersinkron dengan Google Drive</span>';
-            }
-          })
-          .withFailureHandler(function(error) {
-            if (statusEl) {
-              statusEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-500"></i><span>Gagal sinkron cloud (Tersimpan Lokal)</span>';
-            }
-          })
-          .saveNotes(notes);
-      } else {
-        if (statusEl) {
-          statusEl.innerHTML = '<i class="fa-solid fa-database text-blue-500"></i><span>Tersimpan secara lokal</span>';
-        }
+      syncRunning = true;
+      const operation = pendingOperations[0];
+      setSyncStatus('Menyinkronkan perubahan...', 'fa-circle-notch fa-spin', 'text-blue-500');
+
+      const runner = google.script.run
+        .withSuccessHandler(response => {
+          if (!response || response.status !== 'success') {
+            syncRunning = false;
+            setSyncStatus('Sinkronisasi gagal - perubahan tetap antre', 'fa-triangle-exclamation', 'text-amber-500');
+            return;
+          }
+
+          if (operation.type === 'save' && response.note) {
+            const oldId = operation.id;
+            replaceTemporaryId(oldId, response.note);
+          } else if (operation.type === 'delete') {
+            notes = notes.filter(n => String(n.id) !== String(operation.id));
+          }
+
+          // Remove only the operation that was acknowledged by the server.
+          pendingOperations.shift();
+          window.__keepFlowLastNotes = notes.map(n => ({ ...n }));
+          persistLocal();
+          syncRunning = false;
+          render();
+          flushPendingOperations();
+        })
+        .withFailureHandler(error => {
+          syncRunning = false;
+          setSyncStatus('Gagal sinkron - tersimpan lokal, coba lagi saat online', 'fa-triangle-exclamation', 'text-amber-500');
+          console.error('KeepFlow sync error:', error);
+        });
+
+      if (operation.type === 'delete') runner.deleteNote(operation.id);
+      else runner.saveNote(operation.note);
+    }
+
+    function loadInitialData() {
+      showLoader('Memuat data Hadi KeepFlow...');
+      readQueue();
+
+      try {
+        const localData = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
+        notes = Array.isArray(localData) ? localData : [];
+      } catch (e) {
+        notes = [];
       }
+
+      render();
+      hideLoader();
+
+      if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) {
+        setSyncStatus('Mode lokal - menunggu koneksi', 'fa-database', 'text-blue-500');
+        return;
+      }
+
+      google.script.run
+        .withSuccessHandler(serverData => {
+          if (!Array.isArray(serverData)) {
+            setSyncStatus('Respons server tidak valid', 'fa-triangle-exclamation', 'text-amber-500');
+            return;
+          }
+
+          serverReady = true;
+          lastServerIds = new Set(serverData.map(n => String(n.id)));
+          window.__keepFlowLastNotes = serverData.map(n => ({ ...n }));
+          // Server is the baseline. Preserve local-only items only when they are
+          // represented by a queued save; queued deletes must stay deleted.
+          const queuedIds = new Set(pendingOperations.map(op => String(op.id)));
+          const localPending = notes.filter(n => queuedIds.has(String(n.id)));
+          const merged = new Map(serverData.map(n => [String(n.id), n]));
+          localPending.forEach(n => merged.set(String(n.id), n));
+          notes = [...merged.values()].filter(n =>
+            !pendingOperations.some(op => op.type === 'delete' && String(op.id) === String(n.id))
+          );
+          persistLocal();
+          render();
+          flushPendingOperations();
+        })
+        .withFailureHandler(error => {
+          console.error('KeepFlow load error:', error);
+          setSyncStatus('Gagal memuat cloud - menggunakan data lokal', 'fa-triangle-exclamation', 'text-amber-500');
+        })
+        .getNotes();
+    }
+
+    // Backward-compatible entry point used by existing UI actions.
+    // It computes changes against the last cloud snapshot and queues only deltas.
+    function syncToBackend() {
+      persistLocal();
+      if (!serverReady) {
+        // If the server has not loaded yet, keep the local state; do not overwrite
+        // cloud data with an incomplete local snapshot.
+        setSyncStatus('Tersimpan lokal - menunggu data cloud', 'fa-database', 'text-blue-500');
+        return;
+      }
+
+      const currentIds = new Set(notes.map(n => String(n.id)));
+      const previous = window.__keepFlowLastNotes || [];
+      const previousMap = new Map(previous.map(n => [String(n.id), n]));
+
+      notes.forEach(note => {
+        const old = previousMap.get(String(note.id));
+        if (!old || JSON.stringify(old) !== JSON.stringify(note)) enqueueOperation('save', note);
+      });
+      previous.forEach(old => {
+        if (!currentIds.has(String(old.id))) enqueueOperation('delete', old.id);
+      });
+
+      window.__keepFlowLastNotes = notes.map(n => ({ ...n }));
+      persistLocal();
+      flushPendingOperations();
     }
 
     const notesGrid = document.getElementById('notes-grid');
@@ -721,7 +831,8 @@
       const content = document.getElementById('editor-content-editable').innerHTML.trim();
       const category = modalCategorySelect.value;
       const tagsRaw = document.getElementById('modal-tags-input').value;
-      const tags = tagsRaw.split(',').map(t => t.trim()).filter(t => t.length > 0);
+      const tags = [...new Map(tagsRaw.split(',').map(t => t.trim()).filter(Boolean)
+        .map(t => [t.toLocaleLowerCase(), t])).values()];
 
       if (!title && !content) {
         editorModal.classList.add('hidden');
@@ -773,10 +884,25 @@
           const imported = JSON.parse(event.target.result);
           if (Array.isArray(imported)) {
             if (confirm(`Impor ${imported.length} catatan ke Hadi KeepFlow? Data saat ini akan digabungkan atau diperbarui.`)) {
-              notes = imported;
+              const valid = imported.filter(n => n && typeof n === 'object' &&
+                typeof n.title === 'string' && typeof n.content === 'string');
+              const merged = new Map(notes.map(n => [String(n.id), n]));
+              valid.forEach((n, index) => {
+                const id = n.id ? String(n.id) : `import_${Date.now()}_${index}`;
+                merged.set(id, {
+                  id, title: n.title, content: n.content,
+                  category: n.category || 'Umum',
+                  isPinned: Boolean(n.isPinned), isArchived: Boolean(n.isArchived),
+                  tags: Array.isArray(n.tags) ? n.tags.filter(t => typeof t === 'string') : [],
+                  createdAt: n.createdAt || new Date().toISOString(),
+                  updatedAt: n.updatedAt || new Date().toISOString()
+                });
+              });
+              const before = notes.map(n => ({ ...n }));
+              notes = [...merged.values()];
               render();
               syncToBackend();
-              alert('Berhasil mengimpor data catatan!');
+              alert(`Berhasil mengimpor ${valid.length} catatan. Data lokal yang tidak ada di backup tetap dipertahankan.`);
             }
           } else {
             alert('Format file JSON tidak valid.');
@@ -837,19 +963,31 @@
     });
 
     document.getElementById('quick-add-trigger').addEventListener('click', () => openEditor(null));
-    document.getElementById('modal-close-btn').addEventListener('click', () => editorModal.classList.add('hidden'));
+    document.getElementById('modal-close-btn').addEventListener('click', () => {
+      const title = document.getElementById('modal-title-input').value.trim();
+      const content = document.getElementById('editor-content-editable').innerHTML.trim();
+      const current = activeNoteId ? notes.find(n => String(n.id) === String(activeNoteId)) : null;
+      const changed = activeNoteId
+        ? current && (title !== (current.title || '') || content !== (current.content || '') ||
+            document.getElementById('modal-tags-input').value !== (current.tags || []).join(', ') ||
+            modalCategorySelect.value !== (current.category || 'Umum'))
+        : Boolean(title || content);
+      if (changed && !confirm('Perubahan belum disimpan. Tutup editor dan buang perubahan?')) return;
+      editorModal.classList.add('hidden');
+      activeNoteId = null;
+    });
     document.getElementById('modal-save-btn').addEventListener('click', saveActiveNote);
 
     document.getElementById('modal-pin-btn').addEventListener('click', () => {
       if (activeNoteId) {
-        notes = notes.map(n => n.id === activeNoteId ? { ...n, isPinned: !n.isPinned } : n);
+        notes = notes.map(n => n.id === activeNoteId ? { ...n, isPinned: !n.isPinned, updatedAt: new Date().toISOString() } : n);
         render(); syncToBackend();
       }
     });
 
     document.getElementById('modal-archive-btn').addEventListener('click', () => {
       if (activeNoteId) {
-        notes = notes.map(n => n.id === activeNoteId ? { ...n, isArchived: !n.isArchived } : n);
+        notes = notes.map(n => n.id === activeNoteId ? { ...n, isArchived: !n.isArchived, updatedAt: new Date().toISOString() } : n);
         editorModal.classList.add('hidden');
         render(); syncToBackend();
       }
@@ -910,7 +1048,7 @@
     });
 
     window.addEventListener('online', () => {
-      syncToBackend();
+      flushPendingOperations();
     });
 
     document.addEventListener('DOMContentLoaded', () => {
