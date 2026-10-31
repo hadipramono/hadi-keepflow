@@ -1,43 +1,40 @@
-# Instalasi Hadi KeepFlow v1.2.3 — Tahap 1.4
+# Instalasi Hadi KeepFlow v1.2.4 — Tahap 1.5
 
 ## 1. Backup terlebih dahulu
-
 - Jalankan **Export JSON** pada aplikasi.
-- Pastikan folder `apps/KeepFlow/storage` dan seluruh file Markdown masih tersedia di Google Drive.
-- Buat salinan project Apps Script atau simpan salinan file `Index.html` dan `Code.gs` lama.
+- Pastikan folder `apps/KeepFlow/storage` dan seluruh file Markdown tersedia di Google Drive.
+- Buat salinan project Apps Script serta file `Index.html` dan `Code.gs` versi sebelumnya.
 
-## 2. Perbarui backend
-
-1. Buka project Google Apps Script yang digunakan KeepFlow.
-2. Buka file script `Code.gs`.
-3. Ganti seluruh isinya dengan `Code.gs` dari paket ini.
+## 2. Perbarui backend dan frontend
+1. Buka project Google Apps Script.
+2. Ganti seluruh isi `Code.gs` dengan versi dari paket ini.
+3. Ganti seluruh isi HTML `Index` dengan versi dari paket ini.
 4. Simpan project.
 
-## 3. Perbarui frontend
+Kedua file perlu diperbarui karena frontend sekarang mengirim `opId` stabil untuk setiap operasi dan backend menyimpan receipt idempotensi.
 
-Ganti seluruh isi file HTML `Index` dengan versi dalam paket ini. Frontend perlu diperbarui agar dapat menangani respons konflik dari backend.
-
-## 4. Deploy versi baru
-
+## 3. Deploy versi baru
 1. Pilih **Deploy > Manage deployments**.
-2. Edit deployment Web App yang digunakan.
+2. Edit deployment Web App.
 3. Pada bagian Version, pilih **New version**.
-4. Pertahankan pengaturan Execute as dan Who has access sesuai kebutuhan aplikasi.
-5. Klik Deploy.
-6. Buka URL Web App dan jalankan `BACKEND-SECURITY-TEST.md`, `SYNC-QUEUE-TEST.md`, `OFFLINE-RECONCILIATION-TEST.md`, serta `CONFLICT-VERSION-TEST.md`.
+4. Pertahankan pengaturan Execute as dan Who has access sesuai kebutuhan keamanan aplikasi.
+5. Klik Deploy, lalu buka URL Web App.
+
+## 4. Jalankan pengujian
+Jalankan seluruh checklist berikut menggunakan catatan uji:
+- `SYNC-QUEUE-TEST.md`
+- `OFFLINE-RECONCILIATION-TEST.md`
+- `BACKEND-SECURITY-TEST.md`
+- `CONFLICT-VERSION-TEST.md`
+- `SYNC-RECOVERY-TEST.md`
 
 ## 5. Catatan penting
+- Jangan menghapus LocalStorage atau antrean `hadi_keepflow_pending_v1` selama masih ada operasi tertunda.
+- Retry otomatis menggunakan backoff, maksimal delapan kegagalan berturut-turut. Setelah itu tombol **Coba lagi** muncul.
+- Operasi yang sama harus mempertahankan `opId` yang sama saat retry. Jangan mengubah antrean secara manual.
+- Backend menyimpan receipt idempotensi selama tujuh hari menggunakan Script Properties. Receipt bukan audit log permanen.
+- Jika Script Properties mencapai kuota atau Apps Script gagal, operasi tetap perlu diperiksa melalui **Apps Script > Executions**.
+- Pengujian kehilangan respons harus dilakukan pada catatan uji, bukan data penting.
 
-- Backend sekarang menolak update/delete jika file tidak berada langsung di `storage` atau satu folder kategori langsung di bawah `storage`.
-- File dengan lebih dari satu parent Drive ditolak. Jangan memindahkan atau menghapus file tersebut sebelum memeriksa struktur Drive.
-- Folder duplikat `apps`, `KeepFlow`, `storage`, atau kategori akan menyebabkan operasi terkait ditolak agar backend tidak memilih folder secara acak.
-- ID file yang tidak ditemukan tidak lagi diperlakukan sebagai catatan baru.
-- Jangan menghapus LocalStorage atau queue yang masih berisi operasi tertunda.
-
-## 6. Perhatian untuk antrean lama
-
-Operasi save/delete yang tersimpan dari versi sebelumnya mungkin belum memiliki token versi. Saat dikirim setelah upgrade, operasi tersebut akan memicu dialog konflik. Pilih dengan sengaja apakah akan menggunakan versi cloud atau mempertahankan perubahan lokal. Jangan menghapus LocalStorage untuk menghilangkan dialog tersebut.
-
-## 7. Rollback
-
-Jika ditemukan masalah, pulihkan `Code.gs` dan `Index.html` dari backup, lalu deploy sebagai New version. Jangan menghapus atau memindahkan file Drive untuk melakukan rollback.
+## 6. Rollback
+Pulihkan kedua file dari backup, lalu deploy sebagai **New version**. Jangan menghapus atau memindahkan file Drive untuk melakukan rollback.

@@ -4,11 +4,11 @@ Personal notes application using Google Apps Script, Google Drive Markdown files
 
 ## Current package
 
-**v1.2.3 — Tahap 1.4: Conflict Detection & Version Control**
+**v1.2.4 — Tahap 1.5: Reliability & Recovery**
 
 ### Components
-- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, and explicit conflict resolution.
-- `Code.gs`: Apps Script backend with Drive ownership checks and optimistic version checks for update/delete.
+- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, and bounded retry scheduling.
+- `Code.gs`: Apps Script backend with Drive ownership checks, optimistic version checks, and retry idempotency receipts.
 
 ### Storage layout
 
@@ -26,22 +26,25 @@ My Drive/
 Files directly under `storage` are also accepted as notes in category Umum for compatibility with the reader.
 
 ## Main safeguards
-- Pending sync operations retain immutable payload snapshots.
-- Reconnect triggers cloud baseline reconciliation.
+- Pending sync operations retain immutable payload snapshots and stable operation IDs.
+- Queue metadata and note snapshots are persisted in LocalStorage.
+- Reconnect triggers cloud baseline reconciliation before queued writes are replayed.
 - Local pending saves/deletes are preserved during reconciliation.
 - Backend verifies a file's Drive parent chain before update or delete.
-- Missing nonlocal IDs and ambiguous folder structures are rejected instead of silently creating or mutating files.
-- Drive mutations use `LockService`.
-- Existing notes carry a `baseUpdatedAt` version token; stale save/delete requests return a conflict instead of overwriting cloud data.
+- Drive mutations use `LockService` and stale save/delete requests return conflicts.
 - Conflict resolution requires an explicit local-vs-cloud choice.
+- Retry uses exponential backoff with jitter, capped at five minutes, and stops after ten consecutive failures pending manual retry.
+- Backend idempotency receipts make retrying the same operation ID safe after a lost browser response. Receipts are retained for seven days.
 
 ## Installation
-See `INSTALL.md`. Run all four test guides after deployment:
+See `INSTALL.md`. Run all five test guides after deployment:
 - `SYNC-QUEUE-TEST.md`
 - `OFFLINE-RECONCILIATION-TEST.md`
 - `BACKEND-SECURITY-TEST.md`
 - `CONFLICT-VERSION-TEST.md`
+- `SYNC-RECOVERY-TEST.md`
 
 ## Important limitations
 - Version detection uses Drive modification timestamps, not a content hash or atomic Drive ETag precondition. Avoid direct manual edits to stored Markdown files while KeepFlow is in use.
+- Idempotency receipts are temporary Script Properties, not a permanent audit log. The retry guarantee applies to the same operation ID during the receipt retention window.
 - Browser, Apps Script deployment, and live Google Drive validation must be completed by the project owner.

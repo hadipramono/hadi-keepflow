@@ -316,11 +316,13 @@
         <i class="fa-solid fa-cloud"></i>
         <span>Hadi KeepFlow Hybrid Mode</span>
       </span>
+      <button id="retry-sync" type="button" class="hidden text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Coba lagi</button>
     </div>
   </div>
 
   <!-- JavaScript Logic -->
   <script>
+    // Hadi KeepFlow v1.2.4 — Tahap 1.5: Reliability & Recovery
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -397,6 +399,9 @@
     let cloudLoadInProgress = false;
     let cloudLoadRequestId = 0;
     let refreshRequested = false;
+    let retryTimer = null;
+    const MAX_AUTO_RETRIES = 10;
+    const MAX_RETRY_DELAY_MS = 5 * 60 * 1000;
     // Snapshot of the last UI state observed by syncToBackend().
     // This is deliberately separate from the last server response.
     let lastObservedNotes = [];
@@ -432,6 +437,8 @@
               id,
               queuedAt: op.queuedAt || new Date().toISOString(),
               attempts: Number(op.attempts) || 0,
+              nextAttemptAt: op.nextAttemptAt || '',
+              lastError: op.lastError || '',
               expectedUpdatedAt: op.expectedUpdatedAt || ''
             };
             if (op.conflict) normalized.conflict = op.conflict;
@@ -471,6 +478,61 @@
     function setSyncStatus(message, icon = 'fa-cloud', color = 'text-gray-400') {
       const el = document.getElementById('sync-status');
       if (el) el.innerHTML = `<i class="fa-solid ${icon} ${color}"></i><span>${escapeHTML(message)}</span>`;
+    }
+
+    function showManualRetry(show) {
+      const button = document.getElementById('retry-sync');
+      if (button) button.classList.toggle('hidden', !show);
+    }
+
+    function clearRetryTimer() {
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+    }
+
+    function getRetryDelay(attempts) {
+      const base = Math.min(1000 * Math.pow(2, Math.max(0, attempts - 1)), MAX_RETRY_DELAY_MS);
+      // Small jitter prevents synchronized retries across tabs/devices.
+      return Math.round(base * (0.8 + Math.random() * 0.4));
+    }
+
+    function schedulePendingRetry() {
+      clearRetryTimer();
+      if (!pendingOperations.length || !navigator.onLine || !serverReady) return;
+      const head = pendingOperations[0];
+      if ((Number(head.attempts) || 0) >= MAX_AUTO_RETRIES) {
+        showManualRetry(true);
+        setSyncStatus(`Antrean tertahan setelah ${MAX_AUTO_RETRIES} percobaan. Periksa koneksi lalu coba lagi.`, 'fa-triangle-exclamation', 'text-amber-500');
+        return;
+      }
+      const dueAt = head.nextAttemptAt ? new Date(head.nextAttemptAt).getTime() : Date.now();
+      const waitMs = Math.max(0, dueAt - Date.now());
+      showManualRetry(false);
+      if (waitMs === 0) {
+        flushPendingOperations();
+        return;
+      }
+      setSyncStatus(`Sinkronisasi dicoba lagi dalam ${Math.ceil(waitMs / 1000)} detik`, 'fa-clock', 'text-amber-500');
+      retryTimer = setTimeout(() => {
+        retryTimer = null;
+        flushPendingOperations();
+      }, Math.min(waitMs, MAX_RETRY_DELAY_MS));
+    }
+
+    function recordOperationFailure(operation, error) {
+      const failed = pendingOperations.find(op => op.opId === operation.opId);
+      if (!failed) return;
+      failed.attempts = (Number(failed.attempts) || 0) + 1;
+      failed.lastError = String(error && (error.message || error) || 'Kesalahan tidak diketahui').slice(0, 300);
+      if (failed.attempts < MAX_AUTO_RETRIES) {
+        failed.nextAttemptAt = new Date(Date.now() + getRetryDelay(failed.attempts)).toISOString();
+      } else {
+        failed.nextAttemptAt = '';
+      }
+      persistLocal();
+      schedulePendingRetry();
     }
 
     function enqueueOperation(type, noteOrId) {
@@ -634,10 +696,24 @@
       }
 
       if (!pendingOperations.length) {
+        clearRetryTimer();
+        showManualRetry(false);
         setSyncStatus('Tersinkron dengan Google Drive', 'fa-cloud', 'text-green-500');
         return;
       }
 
+      const head = pendingOperations[0];
+      if ((Number(head.attempts) || 0) >= MAX_AUTO_RETRIES) {
+        showManualRetry(true);
+        setSyncStatus(`Antrean tertahan setelah ${MAX_AUTO_RETRIES} percobaan. Periksa koneksi lalu coba lagi.`, 'fa-triangle-exclamation', 'text-amber-500');
+        return;
+      }
+      if (head.nextAttemptAt && new Date(head.nextAttemptAt).getTime() > Date.now()) {
+        schedulePendingRetry();
+        return;
+      }
+      clearRetryTimer();
+      showManualRetry(false);
       const queuedHead = pendingOperations[0];
       const operation = cloneData(queuedHead);
       syncRunning = true;
@@ -659,10 +735,7 @@
           if (!response || response.status !== 'success' || !validSaveResponse) {
             syncRunning = false;
             inFlightOperationId = null;
-            const failed = pendingOperations.find(op => op.opId === operation.opId);
-            if (failed) failed.attempts = (Number(failed.attempts) || 0) + 1;
-            persistLocal();
-            setSyncStatus('Sinkronisasi gagal - perubahan tetap antre', 'fa-triangle-exclamation', 'text-amber-500');
+            recordOperationFailure(operation, 'Respons server tidak valid atau operasi gagal.');
             if (refreshRequested) {
               refreshRequested = false;
               loadInitialData();
@@ -682,6 +755,7 @@
           // Acknowledge by operation ID, never by blindly shifting the queue.
           pendingOperations = pendingOperations.filter(op => op.opId !== operation.opId);
           persistLocal();
+          clearRetryTimer();
 
           syncRunning = false;
           inFlightOperationId = null;
@@ -696,10 +770,7 @@
         .withFailureHandler(error => {
           syncRunning = false;
           inFlightOperationId = null;
-          const failed = pendingOperations.find(op => op.opId === operation.opId);
-          if (failed) failed.attempts = (Number(failed.attempts) || 0) + 1;
-          persistLocal();
-          setSyncStatus('Gagal sinkron - tersimpan lokal, coba lagi saat online', 'fa-triangle-exclamation', 'text-amber-500');
+          recordOperationFailure(operation, error);
           console.error('KeepFlow sync error:', error);
           if (refreshRequested) {
             refreshRequested = false;
@@ -707,8 +778,8 @@
           }
         });
 
-      if (operation.type === 'delete') runner.deleteNote(operation.id, operation.expectedUpdatedAt);
-      else runner.saveNote(operation.note);
+      if (operation.type === 'delete') runner.deleteNote(operation.id, operation.expectedUpdatedAt, operation.opId);
+      else runner.saveNote(operation.note, operation.opId);
     }
 
     function loadInitialData() {
@@ -1361,10 +1432,36 @@
       document.getElementById('sidebar').classList.toggle('hidden');
     });
 
+    document.getElementById('retry-sync').addEventListener('click', () => {
+      if (!pendingOperations.length) return;
+      const head = pendingOperations[0];
+      head.attempts = 0;
+      head.nextAttemptAt = '';
+      head.lastError = '';
+      persistLocal();
+      showManualRetry(false);
+      if (serverReady) flushPendingOperations();
+      else loadInitialData();
+    });
+
     window.addEventListener('online', () => {
       // Refresh the cloud baseline on every reconnect before replaying queued
       // writes. This catches changes made from another tab/device.
+      clearRetryTimer();
       loadInitialData();
+    });
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState !== 'visible') return;
+      // Recover timers that may have been throttled while the tab was hidden.
+      if (pendingOperations.length && serverReady && !syncRunning) {
+        schedulePendingRetry();
+      }
+    });
+
+    window.addEventListener('pageshow', () => {
+      // Queue and note snapshots are persisted continuously; resume safely.
+      if (pendingOperations.length && navigator.onLine) loadInitialData();
     });
 
     document.addEventListener('DOMContentLoaded', () => {
