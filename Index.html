@@ -631,6 +631,14 @@
       pinnedGrid.className = isListView ? 'view-list' : 'view-grid';
       
       if (currentFilter === 'pinned') {
+        // Dedicated pinned view: show only pinned, non-archived notes.
+        pinnedSection.classList.add('hidden');
+        othersTitle.classList.add('hidden');
+        notesGrid.innerHTML = filtered.map(createCardHTML).join('');
+      } else if (currentCategory || currentTag) {
+        // Category/tag views must include BOTH pinned and regular notes.
+        // Pinning only changes grouping in the All Notes view; it must not
+        // hide a note from its category or tag.
         pinnedSection.classList.add('hidden');
         othersTitle.classList.add('hidden');
         notesGrid.innerHTML = filtered.map(createCardHTML).join('');
@@ -638,7 +646,7 @@
         const pinned = filtered.filter(n => n.isPinned && currentFilter !== 'archive');
         const others = filtered.filter(n => !n.isPinned || currentFilter === 'archive');
 
-        if (pinned.length > 0 && currentFilter === 'all' && !currentCategory) {
+        if (pinned.length > 0 && currentFilter === 'all') {
           pinnedSection.classList.remove('hidden');
           othersTitle.classList.remove('hidden');
           pinnedGrid.innerHTML = pinned.map(createCardHTML).join('');

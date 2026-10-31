@@ -1,4 +1,4 @@
-# Hadi KeepFlow v1.1.2
+# Hadi KeepFlow v1.1.3
 
 Paket ini berisi revisi frontend dan backend Hadi KeepFlow.
 
@@ -25,4 +25,4 @@ Metadata catatan tetap menggunakan pembungkus `---JSON---` yang sudah digunakan 
 
 ## Status validasi
 
-File disiapkan sebagai revisi kode. Paket ini belum menjalani pengujian langsung terhadap akun Google Drive atau deployment Apps Script milik pengguna. Lakukan checklist pengujian sebelum menjadikan v1.1.2 sebagai versi utama.
+File disiapkan sebagai revisi kode. Paket ini belum menjalani pengujian langsung terhadap akun Google Drive atau deployment Apps Script milik pengguna. Lakukan checklist pengujian sebelum menjadikan v1.1.3 sebagai versi utama.
