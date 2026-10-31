@@ -1,40 +1,15 @@
-# Instalasi Hadi KeepFlow v1.2.4 — Tahap 1.5
+# Instalasi Hadi KeepFlow v1.2.5 — Tahap 2.1
 
-## 1. Backup terlebih dahulu
-- Jalankan **Export JSON** pada aplikasi.
-- Pastikan folder `apps/KeepFlow/storage` dan seluruh file Markdown tersedia di Google Drive.
-- Buat salinan project Apps Script serta file `Index.html` dan `Code.gs` versi sebelumnya.
+Tahap ini mengoptimalkan frontend. Backend `Code.gs` tidak mengalami perubahan fungsional dari v1.2.4.
 
-## 2. Perbarui backend dan frontend
-1. Buka project Google Apps Script.
-2. Ganti seluruh isi `Code.gs` dengan versi dari paket ini.
-3. Ganti seluruh isi HTML `Index` dengan versi dari paket ini.
-4. Simpan project.
+1. Backup JSON dari aplikasi.
+2. Backup project Apps Script yang sedang aktif.
+3. Ganti isi HTML file `Index` dengan `Index.html` dari paket ini.
+4. `Code.gs` boleh tetap menggunakan versi v1.2.4; file di paket hanya disertakan untuk konsistensi distribusi.
+5. Simpan dan deploy sebagai **New version**.
+6. Jalankan `PERFORMANCE-UX-TEST.md`.
 
-Kedua file perlu diperbarui karena frontend sekarang mengirim `opId` stabil untuk setiap operasi dan backend menyimpan receipt idempotensi.
+Tidak perlu menghapus LocalStorage atau antrean sinkronisasi. Jangan membersihkan `hadi_keepflow_pending_v1`.
 
-## 3. Deploy versi baru
-1. Pilih **Deploy > Manage deployments**.
-2. Edit deployment Web App.
-3. Pada bagian Version, pilih **New version**.
-4. Pertahankan pengaturan Execute as dan Who has access sesuai kebutuhan keamanan aplikasi.
-5. Klik Deploy, lalu buka URL Web App.
-
-## 4. Jalankan pengujian
-Jalankan seluruh checklist berikut menggunakan catatan uji:
-- `SYNC-QUEUE-TEST.md`
-- `OFFLINE-RECONCILIATION-TEST.md`
-- `BACKEND-SECURITY-TEST.md`
-- `CONFLICT-VERSION-TEST.md`
-- `SYNC-RECOVERY-TEST.md`
-
-## 5. Catatan penting
-- Jangan menghapus LocalStorage atau antrean `hadi_keepflow_pending_v1` selama masih ada operasi tertunda.
-- Retry otomatis menggunakan backoff, maksimal delapan kegagalan berturut-turut. Setelah itu tombol **Coba lagi** muncul.
-- Operasi yang sama harus mempertahankan `opId` yang sama saat retry. Jangan mengubah antrean secara manual.
-- Backend menyimpan receipt idempotensi selama tujuh hari menggunakan Script Properties. Receipt bukan audit log permanen.
-- Jika Script Properties mencapai kuota atau Apps Script gagal, operasi tetap perlu diperiksa melalui **Apps Script > Executions**.
-- Pengujian kehilangan respons harus dilakukan pada catatan uji, bukan data penting.
-
-## 6. Rollback
-Pulihkan kedua file dari backup, lalu deploy sebagai **New version**. Jangan menghapus atau memindahkan file Drive untuk melakukan rollback.
+## Rollback
+Jika ada masalah, kembalikan HTML `Index` dari backup v1.2.4 dan deploy sebagai New version. Data Google Drive dan antrean LocalStorage tidak perlu dihapus.

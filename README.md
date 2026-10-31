@@ -4,10 +4,10 @@ Personal notes application using Google Apps Script, Google Drive Markdown files
 
 ## Current package
 
-**v1.2.4 — Tahap 1.5: Reliability & Recovery**
+**v1.2.5 — Tahap 2.1: Frontend Performance**
 
 ### Components
-- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, and bounded retry scheduling.
+- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, bounded retry scheduling, and cached frontend rendering.
 - `Code.gs`: Apps Script backend with Drive ownership checks, optimistic version checks, and retry idempotency receipts.
 
 ### Storage layout

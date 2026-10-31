@@ -322,7 +322,7 @@
 
   <!-- JavaScript Logic -->
   <script>
-    // Hadi KeepFlow v1.2.4 — Tahap 1.5: Reliability & Recovery
+    // Hadi KeepFlow v1.2.5 — Tahap 2.1: Frontend Performance
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -330,6 +330,9 @@
     let searchQuery = '';
     let isListView = false;
     let activeNoteId = null;
+    let searchRenderTimer = null;
+    const SEARCH_DEBOUNCE_MS = 120;
+    const plainTextCache = new WeakMap();
     
     let datePreset = 'all';
     let customStartDate = null;
@@ -919,6 +922,77 @@
     const categoriesList = document.getElementById('categories-list');
     const modalCategorySelect = document.getElementById('modal-category-select');
 
+    // Event delegation keeps listener count constant as cards and navigation
+    // lists are rebuilt. This is cheaper and avoids stale per-element handlers.
+    function handleCardClick(event) {
+      const card = event.target.closest('.card-item');
+      if (!card || !this.contains(card)) return;
+      openEditor(card.dataset.id);
+    }
+    notesGrid.addEventListener('click', handleCardClick);
+    pinnedGrid.addEventListener('click', handleCardClick);
+
+    categoriesList.addEventListener('click', (event) => {
+      const editButton = event.target.closest('.edit-category-btn');
+      if (editButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        const oldCat = editButton.dataset.oldCategory;
+        const newCat = prompt(`Ubah nama kategori "${oldCat}" menjadi:`, oldCat);
+        if (newCat && newCat.trim() && newCat.trim() !== oldCat) {
+          const formattedNewCat = newCat.trim();
+          notes.forEach(note => { if ((note.category || 'Umum') === oldCat) note.category = formattedNewCat; });
+          if (currentCategory === oldCat) currentCategory = formattedNewCat;
+          render();
+          syncToBackend();
+        }
+        return;
+      }
+
+      const categoryButton = event.target.closest('.category-select-btn');
+      if (!categoryButton) return;
+      event.preventDefault();
+      document.querySelectorAll('.nav-item').forEach(button => {
+        button.classList.remove('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
+        button.classList.add('text-gray-600', 'dark:text-gray-400');
+      });
+      currentCategory = categoryButton.dataset.category;
+      currentFilter = 'category';
+      currentTag = null;
+      render();
+    });
+
+    tagsList.addEventListener('click', (event) => {
+      const tagButton = event.target.closest('.tag-item');
+      if (!tagButton) return;
+      event.preventDefault();
+      currentTag = tagButton.dataset.tag;
+      currentCategory = null;
+      currentFilter = 'custom';
+      render();
+    });
+
+    function getPlainText(note) {
+      if (!note || typeof note !== 'object') return '';
+      const source = typeof note.content === 'string' ? note.content : '';
+      const cached = plainTextCache.get(note);
+      if (cached && cached.source === source) return cached.text;
+
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = source;
+      const text = tempDiv.textContent || tempDiv.innerText || '';
+      plainTextCache.set(note, { source, text, lower: text.toLowerCase() });
+      return text;
+    }
+
+    function getSearchableText(note) {
+      const source = typeof note.content === 'string' ? note.content : '';
+      const cached = plainTextCache.get(note);
+      if (cached && cached.source === source) return cached;
+      getPlainText(note);
+      return plainTextCache.get(note);
+    }
+
     function matchesDateFilter(noteDateStr) {
       if (datePreset === 'all') return true;
       if (!noteDateStr) return false;
@@ -950,25 +1024,20 @@
     }
 
     function getFilteredNotes() {
+      const query = searchQuery.toLowerCase().trim();
       return notes.filter(note => {
-        const query = searchQuery.toLowerCase().trim();
-        const title = (note.title || '').toLowerCase();
-        
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = note.content || '';
-        const plainContent = (tempDiv.textContent || tempDiv.innerText || '').toLowerCase();
-
-        const matchesSearch = !query || title.includes(query) || plainContent.includes(query);
-        if (!matchesSearch) return false;
+        if (query) {
+          const title = String(note.title || '').toLowerCase();
+          const searchable = getSearchableText(note);
+          if (!title.includes(query) && !searchable.lower.includes(query)) return false;
+        }
 
         if (!matchesDateFilter(note.updatedAt)) return false;
-
-        if (currentFilter === 'pinned') return note.isPinned && !note.isArchived;
-        if (currentFilter === 'archive') return note.isArchived;
-        if (currentCategory) return (note.category || 'Umum') === currentCategory && !note.isArchived;
-        if (currentTag) return note.tags && note.tags.includes(currentTag) && !note.isArchived;
-
-        return !note.isArchived;
+        if (currentFilter === 'pinned') return note.isPinned && !isArchivedNote(note);
+        if (currentFilter === 'archive') return isArchivedNote(note);
+        if (currentCategory) return (note.category || 'Umum') === currentCategory && !isArchivedNote(note);
+        if (currentTag) return note.tags && note.tags.includes(currentTag) && !isArchivedNote(note);
+        return !isArchivedNote(note);
       });
     }
 
@@ -1006,7 +1075,6 @@
 
       renderCategories();
       renderTags();
-      attachCardListeners();
     }
 
     // Normalize legacy metadata values: the string "false" must not be
@@ -1019,11 +1087,19 @@
 
     function renderCategories() {
       const defaultCats = ['Pekerjaan', 'Pribadi', 'Umum'];
-      // Keep category names visible, but archived notes must not contribute
-      // to the active note count shown in the sidebar.
-      const activeCats = [...new Set([...defaultCats, ...notes.map(n => n.category || 'Umum')])];
-      const activeNotes = notes.filter(n => !isArchivedNote(n));
-      
+      const categoryCounts = new Map();
+      const activeCatsSet = new Set(defaultCats);
+
+      // One pass replaces the previous category-count nested filtering.
+      notes.forEach(note => {
+        const category = note.category || 'Umum';
+        activeCatsSet.add(category);
+        if (!isArchivedNote(note)) {
+          categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+        }
+      });
+      const activeCats = [...activeCatsSet];
+
       categoriesList.innerHTML = activeCats.map(cat => `
         <div class="category-row group w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm ${currentCategory === cat ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'} cursor-pointer">
           <div data-category="${escapeHTML(cat)}" class="category-select-btn flex items-center space-x-3 truncate flex-1">
@@ -1031,7 +1107,7 @@
             <span class="truncate">${escapeHTML(cat)}</span>
           </div>
           <div class="flex items-center space-x-2">
-            <span class="text-xs text-gray-400">${activeNotes.filter(n => (n.category || 'Umum') === cat).length}</span>
+            <span class="text-xs text-gray-400">${categoryCounts.get(cat) || 0}</span>
             ${cat !== 'Umum' ? `<button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori"><i class="fa-solid fa-pen text-xs"></i></button>` : ''}
           </div>
         </div>
@@ -1040,65 +1116,25 @@
       modalCategorySelect.innerHTML = activeCats.map(cat => `
         <option value="${escapeHTML(cat)}">📁 ${escapeHTML(cat)}</option>
       `).join('');
-
-      document.querySelectorAll('.category-select-btn').forEach(el => {
-        el.addEventListener('click', (e) => {
-          e.preventDefault();
-          document.querySelectorAll('.nav-item').forEach(b => {
-            b.classList.remove('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
-            b.classList.add('text-gray-600', 'dark:text-gray-400');
-          });
-          currentCategory = el.dataset.category;
-          currentFilter = 'category';
-          currentTag = null;
-          render();
-        });
-      });
-
-      document.querySelectorAll('.edit-category-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation();
-          const oldCat = btn.dataset.oldCategory;
-          const newCat = prompt(`Ubah nama kategori "${oldCat}" menjadi:`, oldCat);
-          if (newCat && newCat.trim() && newCat.trim() !== oldCat) {
-            const formattedNewCat = newCat.trim();
-            notes.forEach(n => { if ((n.category || 'Umum') === oldCat) n.category = formattedNewCat; });
-            if (currentCategory === oldCat) currentCategory = formattedNewCat;
-            render();
-            syncToBackend();
-          }
-        });
-      });
     }
 
     function renderTags() {
-      const allTags = [...new Set(notes.flatMap(n => n.tags || []))];
+      const allTags = [...new Set(notes.flatMap(note => note.tags || []))];
       tagsList.innerHTML = allTags.map(tag => `
         <button data-tag="${escapeHTML(tag)}" class="tag-item w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm ${currentTag === tag ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'}">
           <i class="fa-solid fa-tag text-xs"></i>
           <span class="truncate">${escapeHTML(tag)}</span>
         </button>
       `).join('');
-
-      document.querySelectorAll('.tag-item').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          e.preventDefault();
-          currentTag = btn.dataset.tag;
-          currentCategory = null;
-          currentFilter = 'custom';
-          render();
-        });
-      });
     }
 
     function createCardHTML(note) {
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = note.content || '';
-      const plainContent = tempDiv.textContent || tempDiv.innerText || '';
+      const plainContent = getPlainText(note);
+      const safeId = escapeHTML(String(note.id == null ? '' : note.id));
 
       if (isListView) {
         return `
-          <div data-id="${note.id}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow transition cursor-pointer flex items-center justify-between gap-4 group">
+          <div data-id="${safeId}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow transition cursor-pointer flex items-center justify-between gap-4 group">
             <div class="flex items-center space-x-3 truncate flex-1">
               <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px] font-medium shrink-0"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
               <span class="font-bold text-gray-900 dark:text-white text-sm shrink-0">${escapeHTML(note.title || 'Tanpa Judul')}</span>
@@ -1116,7 +1152,7 @@
         `;
       } else {
         return `
-          <div data-id="${note.id}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition cursor-pointer flex flex-col justify-between group">
+          <div data-id="${safeId}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition cursor-pointer flex flex-col justify-between group">
             <div>
               <div class="flex items-center justify-between mb-2">
                 <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-medium"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
@@ -1223,12 +1259,6 @@
       editorModal.classList.add('hidden');
       render();
       syncToBackend();
-    }
-
-    function attachCardListeners() {
-      document.querySelectorAll('.card-item').forEach(card => {
-        card.addEventListener('click', () => openEditor(card.dataset.id));
-      });
     }
 
     document.getElementById('export-json-btn').addEventListener('click', () => {
@@ -1404,7 +1434,11 @@
 
     document.getElementById('search-input').addEventListener('input', (e) => {
       searchQuery = e.target.value;
-      render();
+      if (searchRenderTimer) clearTimeout(searchRenderTimer);
+      searchRenderTimer = setTimeout(() => {
+        searchRenderTimer = null;
+        render();
+      }, SEARCH_DEBOUNCE_MS);
     });
 
     document.getElementById('toggle-theme').addEventListener('click', () => {
