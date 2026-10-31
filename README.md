@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.3.0 — Phase 3.1 Data Portability & Backup**
+**v1.3.0.1 — Phase 3.1 Backup & Restore Progress UI**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -43,3 +43,7 @@ Fixes newly created categories not appearing in the sidebar/editor category list
 
 ## Latest release: v1.3.0 — Phase 3.1
 Data Portability & Backup: ZIP backup, ZIP restore/import, manifest, category structure, metadata preservation, import preview, duplicate detection, and merge-only restore. See `CHANGELOG-v1.3.0-phase-3.1.md` and `DATA-PORTABILITY-TEST.md`.
+
+
+## v1.3.0.1 hotfix
+Adds visible progress reporting for ZIP backup and restore/import. See `CHANGELOG-v1.3.0.1-progress-ui.md`.

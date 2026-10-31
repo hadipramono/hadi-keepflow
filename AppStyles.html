@@ -67,4 +67,14 @@
       background-color: rgba(59, 130, 246, 0.3) !important;
       color: #60a5fa !important;
     }
+
+    #data-progress-overlay.is-open { display: flex; }
+    #data-progress-fill.is-indeterminate {
+      width: 35% !important;
+      animation: keepflow-progress-slide 1.2s ease-in-out infinite;
+    }
+    @keyframes keepflow-progress-slide {
+      0% { transform: translateX(-110%); }
+      100% { transform: translateX(310%); }
+    }
   </style>

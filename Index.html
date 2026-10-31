@@ -177,7 +177,7 @@
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.3.0 • Hybrid Drive
+          Hadi KeepFlow v1.3.0.1 • Hybrid Drive
         </div>
       </aside>
 
@@ -284,6 +284,37 @@
       </div>
     </div>
 
+  </div>
+
+
+  <!-- Backup / Restore progress dialog -->
+  <div id="data-progress-overlay" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/50 p-4"
+       role="dialog" aria-modal="true" aria-labelledby="data-progress-title" aria-describedby="data-progress-detail">
+    <div class="w-full max-w-md rounded-2xl bg-white dark:bg-gray-900 shadow-2xl border border-gray-200 dark:border-gray-700 p-5 sm:p-6">
+      <div class="flex items-start gap-3 mb-4">
+        <div id="data-progress-icon" class="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0">
+          <i class="fa-solid fa-cloud-arrow-down text-lg"></i>
+        </div>
+        <div class="min-w-0 flex-1">
+          <h2 id="data-progress-title" class="font-semibold text-gray-900 dark:text-white">Memproses data</h2>
+          <p id="data-progress-stage" class="text-xs text-gray-500 dark:text-gray-400 mt-1">Menyiapkan...</p>
+        </div>
+      </div>
+      <div class="flex items-center justify-between text-xs mb-2">
+        <span id="data-progress-detail" class="text-gray-600 dark:text-gray-300">Mohon tunggu.</span>
+        <strong id="data-progress-percent" class="tabular-nums text-gray-700 dark:text-gray-200">0%</strong>
+      </div>
+      <div class="h-2.5 w-full rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden" role="progressbar"
+           aria-label="Progress backup atau restore" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="data-progress-track">
+        <div id="data-progress-fill" class="h-full rounded-full bg-blue-600 transition-[width] duration-200 ease-out" style="width:0%"></div>
+      </div>
+      <div class="mt-4 flex justify-end">
+        <button id="data-progress-close" type="button" class="hidden px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600">
+          Tutup
+        </button>
+      </div>
+      <p class="mt-3 text-[11px] text-gray-400 dark:text-gray-500">Jangan tutup tab selama proses berlangsung.</p>
+    </div>
   </div>
 
   <!-- JavaScript Logic -->

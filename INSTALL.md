@@ -47,3 +47,13 @@ The page loads JSZip 3.10.1 from jsDelivr for ZIP creation and parsing, so the b
 Then save the Apps Script project and deploy a new version. Open the deployed app online and wait for the initial cloud sync to finish before using Backup ZIP or Restore / Import ZIP.
 
 See `DATA-PORTABILITY-TEST.md` for the full test checklist.
+
+
+## v1.3.0.1 — Backup & Restore Progress UI
+
+If v1.3.0 is already installed, replace only:
+- `Index.html`
+- `AppStyles.html`
+- `AppScripts.html`
+
+No `.gs` file changes are required for this UI hotfix. Save the project and deploy a new version. Run section **F. Progress bar** in `DATA-PORTABILITY-TEST.md`.

@@ -1396,39 +1396,97 @@
       if (!serverReady) throw new Error('Data cloud belum siap. Tunggu proses pemuatan selesai.');
     }
 
+
+    // Shared visual progress UI for long-running backup and restore tasks.
+    function showDataProgress(title, stage, detail, percent, indeterminate) {
+      const overlay = document.getElementById('data-progress-overlay');
+      overlay.classList.remove('hidden');
+      overlay.classList.add('is-open');
+      document.getElementById('data-progress-title').textContent = title;
+      document.getElementById('data-progress-close').classList.add('hidden');
+      updateDataProgress(stage, detail, percent, indeterminate);
+    }
+
+    function updateDataProgress(stage, detail, percent, indeterminate) {
+      const fill = document.getElementById('data-progress-fill');
+      const track = document.getElementById('data-progress-track');
+      const safePercent = Math.max(0, Math.min(100, Number(percent) || 0));
+      document.getElementById('data-progress-stage').textContent = stage || '';
+      document.getElementById('data-progress-detail').textContent = detail || '';
+      document.getElementById('data-progress-percent').textContent = indeterminate ? '…' : Math.round(safePercent) + '%';
+      track.setAttribute('aria-valuenow', String(Math.round(safePercent)));
+      fill.classList.toggle('is-indeterminate', Boolean(indeterminate));
+      if (!indeterminate) fill.style.width = safePercent + '%';
+    }
+
+    function finishDataProgress(stage, detail, isError) {
+      const fill = document.getElementById('data-progress-fill');
+      fill.classList.remove('is-indeterminate');
+      fill.style.width = isError ? fill.style.width : '100%';
+      updateDataProgress(stage, detail, isError ? Number(document.getElementById('data-progress-track').getAttribute('aria-valuenow')) : 100, false);
+      const icon = document.getElementById('data-progress-icon');
+      icon.innerHTML = isError
+        ? '<i class="fa-solid fa-triangle-exclamation text-lg"></i>'
+        : '<i class="fa-solid fa-circle-check text-lg"></i>';
+      icon.className = isError
+        ? 'h-10 w-10 rounded-xl bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-300 flex items-center justify-center shrink-0'
+        : 'h-10 w-10 rounded-xl bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-300 flex items-center justify-center shrink-0';
+      document.getElementById('data-progress-close').classList.remove('hidden');
+    }
+
+    function hideDataProgress() {
+      const overlay = document.getElementById('data-progress-overlay');
+      overlay.classList.add('hidden');
+      overlay.classList.remove('is-open');
+      document.getElementById('data-progress-fill').classList.remove('is-indeterminate');
+      document.getElementById('data-progress-fill').style.width = '0%';
+      document.getElementById('data-progress-icon').innerHTML = '<i class="fa-solid fa-cloud-arrow-down text-lg"></i>';
+      document.getElementById('data-progress-icon').className = 'h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 flex items-center justify-center shrink-0';
+    }
+
+    function yieldToBrowser() {
+      return new Promise(resolve => requestAnimationFrame(() => resolve()));
+    }
+
+    document.getElementById('data-progress-close').addEventListener('click', hideDataProgress);
+
     async function createKeepFlowBackup() {
-      ensureBackupReady();
       const button = document.getElementById('backup-zip-btn');
-      button.disabled = true;
-      button.classList.add('opacity-50');
-      setSyncStatus('Menyiapkan backup ZIP...', 'fa-circle-notch fa-spin', 'text-blue-500');
       try {
-        // Fetch an authoritative cloud snapshot rather than trusting a possibly stale local cache.
+        ensureBackupReady();
+        button.disabled = true;
+        button.classList.add('opacity-50');
+        showDataProgress('Membuat Backup ZIP', 'Mengambil data dari Google Drive', 'Mengambil snapshot catatan dan kategori...', 3, true);
+        setSyncStatus('Menyiapkan backup ZIP...', 'fa-circle-notch fa-spin', 'text-blue-500');
+
+        // Fetch an authoritative, atomic cloud snapshot.
         const snapshot = await callKeepFlowServer('getBackupSnapshot');
         if (!snapshot || !Array.isArray(snapshot.notes) || !Array.isArray(snapshot.categories)) {
           throw new Error('Respons snapshot cloud tidak valid.');
         }
         const cloudNotes = snapshot.notes;
         const cloudCategories = snapshot.categories;
+        updateDataProgress('Menyiapkan arsip', cloudNotes.length + ' catatan ditemukan.', 12, false);
+        await yieldToBrowser();
 
         const zip = new JSZip();
         const manifest = {
           format: KEEPFLOW_BACKUP_FORMAT,
           schemaVersion: KEEPFLOW_BACKUP_SCHEMA,
           application: 'Hadi KeepFlow',
-          applicationVersion: '1.3.0',
+          applicationVersion: '1.3.0.1',
           createdAt: snapshot.generatedAt || new Date().toISOString(),
           noteCount: cloudNotes.length,
           categories: [...new Set(['Umum', ...cloudCategories])],
           notes: []
         };
 
-        cloudNotes.forEach((note, index) => {
+        for (let index = 0; index < cloudNotes.length; index++) {
+          const note = cloudNotes[index];
           const category = safeBackupSegment(note.category || 'Umum', 'Umum').slice(0, 120);
           const title = safeBackupSegment(note.title || ('Catatan ' + (index + 1)), 'Catatan Tanpa Judul');
           const filename = title + '.md';
           const path = category + '/' + filename;
-          // JSZip creates the directory entries, including categories with zero notes.
           zip.file(path, makeBackupNoteFile(note));
           manifest.notes.push({
             path,
@@ -1437,22 +1495,42 @@
             originalId: String(note.id || ''),
             updatedAt: note.updatedAt || ''
           });
-        });
+
+          const percent = cloudNotes.length ? 12 + ((index + 1) / cloudNotes.length) * 48 : 60;
+          updateDataProgress('Mengumpulkan catatan', 'Menambahkan catatan ' + (index + 1) + ' dari ' + cloudNotes.length, percent, false);
+          if (index % 20 === 0) await yieldToBrowser();
+        }
+
         manifest.categories.forEach(category => zip.folder(safeBackupSegment(category, 'Umum')));
         zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+        updateDataProgress('Mengompres arsip ZIP', 'Menyiapkan file untuk diunduh...', 62, false);
+        await yieldToBrowser();
 
         const blob = await zip.generateAsync({
           type: 'blob',
           compression: 'DEFLATE',
           compressionOptions: { level: 6 }
+        }, metadata => {
+          updateDataProgress(
+            'Mengompres arsip ZIP',
+            'Proses kompresi ' + Math.round(metadata.percent) + '%',
+            62 + (metadata.percent * 0.36),
+            false
+          );
         });
+
         downloadBlob(blob, 'hadi_keepflow_backup_' + new Date().toISOString().slice(0, 10) + '.zip');
+        finishDataProgress('Backup selesai', cloudNotes.length + ' catatan dan ' + manifest.categories.length + ' kategori berhasil di-backup.', false);
         setSyncStatus('Backup ZIP berhasil dibuat', 'fa-cloud-arrow-down', 'text-green-500');
+        await new Promise(resolve => setTimeout(resolve, 900));
+        hideDataProgress();
         alert('Backup selesai. ' + cloudNotes.length + ' catatan dan ' + manifest.categories.length + ' kategori disimpan ke ZIP.');
       } catch (error) {
         console.error('KeepFlow backup error:', error);
+        finishDataProgress('Backup gagal', error.message, true);
         setSyncStatus('Backup gagal', 'fa-triangle-exclamation', 'text-red-500');
         alert('Backup gagal: ' + error.message);
+        hideDataProgress();
       } finally {
         button.disabled = false;
         button.classList.remove('opacity-50');
@@ -1505,6 +1583,7 @@
     async function inspectKeepFlowZip(file) {
       if (!file || !/\.zip$/i.test(file.name)) throw new Error('Pilih file ZIP KeepFlow.');
       if (file.size > MAX_IMPORT_ZIP_BYTES) throw new Error('Ukuran ZIP melebihi batas 25 MB.');
+      updateDataProgress('Membaca arsip ZIP', 'Membuka dan memeriksa struktur arsip...', 8, true);
       const zip = await JSZip.loadAsync(file, { checkCRC32: true });
       const entries = Object.values(zip.files).filter(entry => !entry.dir && /\.(md|txt)$/i.test(entry.name));
       if (entries.length > MAX_IMPORT_ENTRIES) throw new Error('ZIP berisi terlalu banyak file (maksimal 2.000 catatan).');
@@ -1536,7 +1615,11 @@
       const imported = [];
       const invalid = [];
       let totalBytes = 0;
-      for (const entry of entries) {
+      let processedDeclaredBytes = 0;
+      const totalDeclaredBytes = Math.max(1, declaredExpandedBytes);
+      for (let entryIndex = 0; entryIndex < entries.length; entryIndex++) {
+        const entry = entries[entryIndex];
+        const entrySize = Number(entry._data.uncompressedSize) || 0;
         try {
           if (entry.name.startsWith('/') || entry.name.includes('\\') || /^[A-Za-z]:/.test(entry.name)) {
             throw new Error('Path file tidak aman.');
@@ -1545,14 +1628,27 @@
           if (segments.length < 1 || segments.length > 2 || segments.some(part => part === '.' || part === '..')) {
             throw new Error('Struktur folder tidak didukung.');
           }
-          const raw = await entry.async('string');
+          const raw = await entry.async('string', metadata => {
+            const withinEntry = entrySize * ((metadata && Number(metadata.percent)) || 0) / 100;
+            const overall = (processedDeclaredBytes + withinEntry) / totalDeclaredBytes;
+            updateDataProgress(
+              'Membaca catatan dari ZIP',
+              'Memeriksa file ' + (entryIndex + 1) + ' dari ' + entries.length,
+              10 + (overall * 24),
+              false
+            );
+          });
           totalBytes += new Blob([raw]).size;
           if (totalBytes > MAX_IMPORT_ZIP_BYTES) throw new Error('Total data hasil ekstraksi melebihi 25 MB.');
           imported.push(parseBackupNoteFile(raw, entry.name));
         } catch (error) {
           invalid.push({ path: entry.name, message: error.message });
         }
+        processedDeclaredBytes += entrySize;
+        if (entryIndex % 15 === 0) await yieldToBrowser();
       }
+      updateDataProgress('Menganalisis isi arsip', 'Mendeteksi duplikasi dan konflik...', 35, false);
+      await yieldToBrowser();
 
       const importedCategories = new Set();
       if (manifest && Array.isArray(manifest.categories)) {
@@ -1612,6 +1708,7 @@
       input.disabled = true;
       try {
         ensureBackupReady();
+        showDataProgress('Restore / Import ZIP', 'Memeriksa arsip', 'Membaca file ZIP dan memvalidasi isinya...', 5, true);
         setSyncStatus('Memeriksa arsip ZIP...', 'fa-circle-notch fa-spin', 'text-blue-500');
         const preview = await inspectKeepFlowZip(file);
         const invalidCount = preview.invalid.length;
@@ -1627,14 +1724,24 @@
           'Data yang sudah ada tidak akan dihapus atau ditimpa.',
           'Lanjutkan?'
         ].join('\n');
+        updateDataProgress('Preview siap', preview.notes.length + ' catatan baru siap dipulihkan.', 36, false);
+        await yieldToBrowser();
         if (!confirm(summary)) {
           setSyncStatus('Restore dibatalkan', 'fa-cloud', 'text-gray-400');
+          hideDataProgress();
           return;
         }
 
         let categoriesCreated = 0;
-        for (const category of preview.categories) {
-          if (category.toLocaleLowerCase() === 'umum') continue;
+        const categoriesToCreate = preview.categories.filter(category => category.toLocaleLowerCase() !== 'umum');
+        for (let i = 0; i < categoriesToCreate.length; i++) {
+          const category = categoriesToCreate[i];
+          updateDataProgress(
+            'Menyiapkan kategori',
+            'Memproses kategori ' + (i + 1) + ' dari ' + categoriesToCreate.length + ': ' + category,
+            categoriesToCreate.length ? 36 + ((i + 1) / categoriesToCreate.length) * 9 : 45,
+            false
+          );
           const response = await callKeepFlowServer('createCategoryFolder', category);
           if (!response || response.status !== 'success') {
             throw new Error((response && response.message) || ('Gagal membuat kategori ' + category));
@@ -1645,12 +1752,19 @@
         let saved = 0;
         const importedNotes = [];
         for (let i = 0; i < preview.notes.length; i++) {
+          updateDataProgress(
+            'Memulihkan catatan',
+            'Menyimpan catatan ' + (i + 1) + ' dari ' + preview.notes.length + ': ' + preview.notes[i].title,
+            preview.notes.length ? 45 + ((i + 1) / preview.notes.length) * 52 : 97,
+            false
+          );
           setSyncStatus('Memulihkan catatan ' + (i + 1) + ' dari ' + preview.notes.length + '...', 'fa-circle-notch fa-spin', 'text-blue-500');
           const savedNote = await saveImportedNote(preview.notes[i], i);
           importedNotes.push(savedNote);
           saved++;
         }
 
+        updateDataProgress('Memperbarui daftar catatan', 'Memperbarui cache lokal dan kategori...', 98, false);
         // Merge into local state only after each cloud write has been acknowledged.
         const byId = new Map(notes.map(note => [String(note.id), note]));
         importedNotes.forEach(note => byId.set(String(note.id), note));
@@ -1659,7 +1773,10 @@
         persistLocal();
         reconcileCloudCategories(await callKeepFlowServer('getCategories'));
         render();
+        finishDataProgress('Restore selesai', saved + ' catatan berhasil dipulihkan. Data lama tetap aman.', false);
         setSyncStatus('Restore selesai', 'fa-cloud-arrow-up', 'text-green-500');
+        await new Promise(resolve => setTimeout(resolve, 900));
+        hideDataProgress();
         alert(
           'Restore selesai.\n' +
           'Catatan ditambahkan: ' + saved + '\n' +
@@ -1671,8 +1788,10 @@
         );
       } catch (error) {
         console.error('KeepFlow restore error:', error);
+        finishDataProgress('Restore gagal / terhenti', error.message, true);
         setSyncStatus('Restore berhenti - periksa data cloud', 'fa-triangle-exclamation', 'text-red-500');
         alert('Restore tidak selesai: ' + error.message + '\n\nCatatan yang sudah berhasil disimpan tetap berada di Google Drive. Jalankan restore lagi untuk melanjutkan; duplikat akan dilewati.');
+        hideDataProgress();
         // Refresh cloud state after a partial restore so the UI reflects acknowledged writes.
         try { loadInitialData(); } catch (refreshError) { console.warn(refreshError); }
       } finally {

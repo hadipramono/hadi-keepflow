@@ -50,3 +50,14 @@ Expected: files are imported with category inferred from the first folder; root-
 
 ## Notes
 Restore is merge-only. It never deletes or overwrites existing notes. Title conflicts with different content are skipped and must be resolved manually.
+
+
+## F. Progress bar
+1. Start Backup ZIP with several notes.
+2. Confirm the progress dialog appears and moves through cloud snapshot, note collection, and ZIP compression.
+3. Start Restore / Import ZIP.
+4. Confirm the dialog shows ZIP inspection, file reading, category creation, and note saving stages.
+5. Confirm completion reaches 100% and the dialog can be closed.
+6. Try an invalid ZIP and confirm an error state is shown.
+
+Expected: progress is visible and updates during long-running steps. While waiting for Apps Script or ZIP parsing, the dialog may show an animated indeterminate bar because those operations do not expose granular progress.
