@@ -336,10 +336,11 @@
 
       <input type="text" id="modal-title-input" placeholder="Judul" class="w-full text-2xl sm:text-3xl font-bold bg-transparent border-0 focus:ring-0 px-0 mb-4 text-gray-900 dark:text-white placeholder-gray-400">
       
-      <div id="modal-timestamps" class="text-xs text-gray-400 mb-4 flex space-x-4">
+      <div id="modal-timestamps" class="text-xs text-gray-400 mb-2 flex flex-wrap gap-x-4 gap-y-1">
         <span id="meta-created">Dibuat: -</span>
         <span id="meta-updated">Diubah: -</span>
       </div>
+      <div id="editor-draft-status" class="text-xs text-gray-400 mb-3" role="status" aria-live="polite">Perubahan tersimpan lokal saat Anda mengetik.</div>
 
       <div id="editor-content-editable" contenteditable="true" placeholder="Tulis catatan di sini..." class="w-full flex-1 bg-transparent border-0 focus:ring-0 px-0 resize-none text-base sm:text-lg text-gray-700 dark:text-gray-200 focus:outline-none min-h-[250px] outline-none"></div>
 
@@ -353,7 +354,7 @@
 
   <!-- JavaScript Logic -->
   <script>
-    // Hadi KeepFlow v1.2.6 — Tahap 2.2: UX & Navigation
+    // Hadi KeepFlow v1.2.7 — Tahap 2.3: Editor & Content Handling
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -364,6 +365,11 @@
     let searchRenderTimer = null;
     const SEARCH_DEBOUNCE_MS = 120;
     const plainTextCache = new WeakMap();
+    const DRAFT_KEY = 'hadi_keepflow_editor_draft_v1';
+    const DRAFT_AUTOSAVE_MS = 650;
+    let draftSaveTimer = null;
+    let editorBaseline = null;
+    let editorDraftDirty = false;
     
     let datePreset = 'all';
     let customStartDate = null;
@@ -1308,6 +1314,115 @@
       else archiveBtn.classList.remove('active');
     }
 
+    function setEditorDraftStatus(message, color = 'text-gray-400') {
+      const status = document.getElementById('editor-draft-status');
+      if (!status) return;
+      status.className = `text-xs mb-3 ${color}`;
+      status.textContent = message;
+    }
+
+    function collectEditorDraft() {
+      return {
+        noteId: activeNoteId ? String(activeNoteId) : '__new__',
+        title: document.getElementById('modal-title-input').value,
+        content: document.getElementById('editor-content-editable').innerHTML,
+        category: modalCategorySelect.value || 'Umum',
+        tagsText: document.getElementById('modal-tags-input').value,
+        baselineUpdatedAt: editorBaseline && editorBaseline.updatedAt || '',
+        savedAt: new Date().toISOString()
+      };
+    }
+
+    function readEditorDraft() {
+      try {
+        const draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null');
+        return draft && typeof draft === 'object' ? draft : null;
+      } catch (error) {
+        console.warn('KeepFlow draft read error:', error);
+        return null;
+      }
+    }
+
+    function persistEditorDraft() {
+      if (!editorModal || editorModal.classList.contains('hidden')) return;
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(collectEditorDraft()));
+        editorDraftDirty = false;
+        setEditorDraftStatus('Draft tersimpan di perangkat ini', 'text-green-600 dark:text-green-400');
+      } catch (error) {
+        setEditorDraftStatus('Draft gagal disimpan lokal. Periksa kapasitas penyimpanan browser.', 'text-red-500');
+        console.error('KeepFlow draft persistence error:', error);
+      }
+    }
+
+    function scheduleEditorDraftSave() {
+      editorDraftDirty = true;
+      setEditorDraftStatus('Ada perubahan — menyimpan draft lokal…', 'text-amber-600 dark:text-amber-400');
+      if (draftSaveTimer) clearTimeout(draftSaveTimer);
+      draftSaveTimer = setTimeout(() => {
+        draftSaveTimer = null;
+        persistEditorDraft();
+      }, DRAFT_AUTOSAVE_MS);
+    }
+
+    function clearEditorDraft() {
+      if (draftSaveTimer) clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+      editorDraftDirty = false;
+      try { localStorage.removeItem(DRAFT_KEY); }
+      catch (error) { console.warn('KeepFlow draft cleanup error:', error); }
+    }
+
+    function normalizeTags(tagsRaw) {
+      const unique = new Map();
+      String(tagsRaw || '').split(',').map(tag => tag.trim()).filter(Boolean).forEach(tag => {
+        const key = tag.toLocaleLowerCase();
+        if (!unique.has(key)) unique.set(key, tag.slice(0, 60));
+      });
+      return [...unique.values()].slice(0, 50);
+    }
+
+    // Keep editor HTML limited to formatting produced by the toolbar and safe links.
+    // Pasted scripts, event attributes, styles and unsafe URL schemes are removed.
+    function sanitizeEditorHTML(html) {
+      const parser = new DOMParser();
+      const parsed = parser.parseFromString(String(html || ''), 'text/html');
+      const allowedTags = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'H1', 'H2', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'A']);
+      const cleanNode = node => {
+        [...node.childNodes].forEach(child => {
+          if (child.nodeType === Node.COMMENT_NODE) {
+            child.remove();
+            return;
+          }
+          if (child.nodeType !== Node.ELEMENT_NODE) return;
+          if (!allowedTags.has(child.tagName)) {
+            if (['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'SVG', 'MATH'].includes(child.tagName)) {
+              child.remove();
+            } else {
+              cleanNode(child);
+              child.replaceWith(...child.childNodes);
+            }
+            return;
+          }
+          const href = child.tagName === 'A' ? child.getAttribute('href') : null;
+          [...child.attributes].forEach(attr => child.removeAttribute(attr.name));
+          if (child.tagName === 'A' && href) {
+            try {
+              const url = new URL(href, window.location.href);
+              if (['http:', 'https:', 'mailto:'].includes(url.protocol)) {
+                child.setAttribute('href', url.href);
+                child.setAttribute('rel', 'noopener noreferrer');
+                child.setAttribute('target', '_blank');
+              }
+            } catch (error) {}
+          }
+          cleanNode(child);
+        });
+      };
+      cleanNode(parsed.body);
+      return parsed.body.innerHTML;
+    }
+
     function openEditor(noteId = null) {
       activeNoteId = noteId;
       const modalTitle = document.getElementById('modal-title-input');
@@ -1318,15 +1433,17 @@
 
       let currentNote = null;
       if (noteId) {
-        currentNote = notes.find(n => n.id === noteId);
-        if (currentNote) {
-          modalTitle.value = currentNote.title || '';
-          modalContentEditable.innerHTML = currentNote.content || '';
-          modalCategorySelect.value = currentNote.category || 'Umum';
-          modalTags.value = (currentNote.tags || []).join(', ');
-          metaCreated.textContent = `Dibuat: ${formatDate(currentNote.createdAt)}`;
-          metaUpdated.textContent = `Diperbarui: ${formatDate(currentNote.updatedAt)}`;
-        }
+        currentNote = notes.find(n => String(n.id) === String(noteId));
+      }
+      editorBaseline = currentNote ? cloneData(currentNote) : null;
+
+      if (currentNote) {
+        modalTitle.value = currentNote.title || '';
+        modalContentEditable.innerHTML = sanitizeEditorHTML(currentNote.content || '');
+        modalCategorySelect.value = currentNote.category || 'Umum';
+        modalTags.value = (currentNote.tags || []).join(', ');
+        metaCreated.textContent = `Dibuat: ${formatDate(currentNote.createdAt)}`;
+        metaUpdated.textContent = `Diperbarui: ${formatDate(currentNote.updatedAt)}`;
       } else {
         modalTitle.value = '';
         modalContentEditable.innerHTML = '';
@@ -1337,6 +1454,30 @@
         metaUpdated.textContent = `Diperbarui: ${nowFormatted}`;
       }
 
+      // Restore only a draft belonging to this exact note (or a new-note draft).
+      const draft = readEditorDraft();
+      const expectedDraftId = noteId ? String(noteId) : '__new__';
+      if (draft && draft.noteId === expectedDraftId) {
+        const draftIsStale = Boolean(currentNote && draft.baselineUpdatedAt &&
+          currentNote.updatedAt && draft.baselineUpdatedAt !== currentNote.updatedAt);
+        const prompt = draftIsStale
+          ? 'Ada draft lokal dari versi catatan yang lebih lama. Pulihkan draft ini? Perubahan cloud yang lebih baru tidak akan dihapus sampai Anda menekan Simpan.'
+          : 'Ditemukan draft lokal yang belum disimpan. Pulihkan draft?';
+        if (confirm(prompt)) {
+          modalTitle.value = String(draft.title || '');
+          modalContentEditable.innerHTML = sanitizeEditorHTML(draft.content || '');
+          modalCategorySelect.value = String(draft.category || 'Umum');
+          modalTags.value = String(draft.tagsText || '');
+          setEditorDraftStatus('Draft lokal dipulihkan — periksa sebelum menyimpan.', 'text-amber-600 dark:text-amber-400');
+        } else {
+          clearEditorDraft();
+          setEditorDraftStatus('Draft sebelumnya dibuang.', 'text-gray-400');
+        }
+      } else {
+        setEditorDraftStatus('Perubahan akan disimpan sebagai draft lokal saat Anda mengetik.', 'text-gray-400');
+      }
+
+      editorDraftDirty = false;
       updateModalActionStates(currentNote);
       editorModal.classList.remove('hidden');
       modalContentEditable.focus();
@@ -1345,19 +1486,27 @@
 
     function saveActiveNote() {
       const title = document.getElementById('modal-title-input').value.trim();
-      const content = document.getElementById('editor-content-editable').innerHTML.trim();
-      const category = modalCategorySelect.value;
-      const tagsRaw = document.getElementById('modal-tags-input').value;
-      const tags = [...new Map(tagsRaw.split(',').map(t => t.trim()).filter(Boolean)
-        .map(t => [t.toLocaleLowerCase(), t])).values()];
+      const content = sanitizeEditorHTML(document.getElementById('editor-content-editable').innerHTML.trim());
+      const category = String(modalCategorySelect.value || 'Umum').trim().slice(0, 120) || 'Umum';
+      const tags = normalizeTags(document.getElementById('modal-tags-input').value);
 
+      if (content.length > 500000) {
+        alert('Isi catatan terlalu besar. Maksimal 500.000 karakter.');
+        return;
+      }
+      if (title.length > 180) {
+        alert('Judul terlalu panjang. Maksimal 180 karakter.');
+        return;
+      }
       if (!title && !content) {
+        clearEditorDraft();
         editorModal.classList.add('hidden');
+        activeNoteId = null;
         return;
       }
 
       if (activeNoteId) {
-        notes = notes.map(n => n.id === activeNoteId ? {
+        notes = notes.map(n => String(n.id) === String(activeNoteId) ? {
           ...n, title, content, category, tags, updatedAt: new Date().toISOString()
         } : n);
       } else {
@@ -1371,7 +1520,9 @@
         });
       }
 
+      clearEditorDraft();
       editorModal.classList.add('hidden');
+      activeNoteId = null;
       render();
       syncToBackend();
     }
@@ -1489,10 +1640,32 @@
             modalCategorySelect.value !== (current.category || 'Umum'))
         : Boolean(title || content);
       if (changed && !confirm('Perubahan belum disimpan. Tutup editor dan buang perubahan?')) return;
+      if (changed) clearEditorDraft();
+      else clearEditorDraft();
       editorModal.classList.add('hidden');
       activeNoteId = null;
+      editorBaseline = null;
     });
     document.getElementById('modal-save-btn').addEventListener('click', saveActiveNote);
+    document.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' &&
+          !editorModal.classList.contains('hidden')) {
+        event.preventDefault();
+        saveActiveNote();
+      }
+    });
+
+    // Local draft autosave is deliberately separate from cloud sync: typing
+    // never creates a Drive operation until the user explicitly presses Simpan.
+    ['modal-title-input', 'editor-content-editable', 'modal-category-select', 'modal-tags-input'].forEach(id => {
+      const element = document.getElementById(id);
+      if (!element) return;
+      element.addEventListener('input', scheduleEditorDraftSave);
+      element.addEventListener('change', scheduleEditorDraftSave);
+    });
+    window.addEventListener('beforeunload', () => {
+      if (!editorModal.classList.contains('hidden') && editorDraftDirty) persistEditorDraft();
+    });
 
     document.getElementById('modal-pin-btn').addEventListener('click', () => {
       if (!activeNoteId) return;

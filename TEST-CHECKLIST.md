@@ -42,3 +42,12 @@ Checklist ini adalah rencana pengujian manual, bukan bukti bahwa seluruh skenari
 - [ ] Refresh yang terjadi saat operasi tulis berlangsung ditunda hingga operasi selesai.
 - [ ] Kegagalan refresh tidak menghapus data lokal.
 - [ ] Lihat `OFFLINE-RECONCILIATION-TEST.md` untuk skenario lengkap.
+
+## Tahap 2.3 — Editor & Content Handling
+- [ ] Draft editor tersimpan lokal setelah jeda input.
+- [ ] Draft dapat dipulihkan setelah reload dengan konfirmasi.
+- [ ] Draft tidak dikirim ke Drive sebelum Simpan.
+- [ ] Ctrl+S / Cmd+S menjalankan Simpan.
+- [ ] HTML berbahaya dibersihkan dan format toolbar tetap berfungsi.
+- [ ] Tag dinormalisasi dan batas input diterapkan.
+- [ ] Regression offline, antrean, konflik, dan sinkronisasi tetap lulus.

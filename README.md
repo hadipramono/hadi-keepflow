@@ -4,10 +4,10 @@ Personal notes application using Google Apps Script, Google Drive Markdown files
 
 ## Current package
 
-**v1.2.6 — Tahap 2.2: UX & Navigation**
+**v1.2.7 — Tahap 2.3: Editor & Content Handling**
 
 ### Components
-- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, bounded retry scheduling, cached frontend rendering, responsive sidebar navigation, active-view context, empty states, and persistent sync status.
+- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, bounded retry scheduling, cached frontend rendering, responsive sidebar navigation, active-view context, empty states, persistent sync status, local editor drafts, safe rich-text sanitization, and normalized tags.
 - `Code.gs`: Apps Script backend with Drive ownership checks, optimistic version checks, and retry idempotency receipts.
 
 ### Storage layout
@@ -45,8 +45,10 @@ See `INSTALL.md`. Run the test guides after deployment:
 - `SYNC-RECOVERY-TEST.md`
 - `PERFORMANCE-UX-TEST.md`
 - `UX-NAVIGATION-TEST.md`
+- `EDITOR-CONTENT-TEST.md`
 
 ## Important limitations
 - Version detection uses Drive modification timestamps, not a content hash or atomic Drive ETag precondition. Avoid direct manual edits to stored Markdown files while KeepFlow is in use.
 - Idempotency receipts are temporary Script Properties, not a permanent audit log. The retry guarantee applies to the same operation ID during the receipt retention window.
+- Editor drafts are local to one browser/device and are not synchronized until the user presses Simpan.
 - Browser, Apps Script deployment, and live Google Drive validation must be completed by the project owner.
