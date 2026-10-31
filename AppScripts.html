@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.0 — Phase 3.1 Data Portability & Backup
+    // Hadi KeepFlow v1.3.1 — Phase 3.2 Search & Discovery
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -10,6 +10,10 @@
     let activeNoteId = null;
     let searchRenderTimer = null;
     const SEARCH_DEBOUNCE_MS = 120;
+    const SEARCH_HISTORY_KEY = 'hadi_keepflow_search_history_v1';
+    const SEARCH_HISTORY_LIMIT = 8;
+    let recentSearches = [];
+    let sortMode = 'updated_desc';
     const plainTextCache = new WeakMap();
     const DRAFT_KEY = 'hadi_keepflow_editor_draft_v1';
     const DRAFT_AUTOSAVE_MS = 650;
@@ -773,7 +777,7 @@
       const meta = document.getElementById('active-view-meta');
       const clearButton = document.getElementById('clear-view-filter');
       const emptyState = document.getElementById('notes-empty-state');
-      const hasViewFilter = currentFilter !== 'all' || currentCategory || currentTag;
+      const hasViewFilter = currentFilter !== 'all' || currentCategory || currentTag || Boolean(searchQuery.trim()) || datePreset !== 'all';
       let label = 'Semua Catatan';
       if (currentFilter === 'pinned') label = 'Disematkan';
       else if (currentFilter === 'archive') label = 'Arsip';
@@ -945,22 +949,128 @@
       return true;
     }
 
-    function getFilteredNotes() {
-      const query = searchQuery.toLowerCase().trim();
-      return notes.filter(note => {
-        if (query) {
-          const title = String(note.title || '').toLowerCase();
-          const searchable = getSearchableText(note);
-          if (!title.includes(query) && !searchable.lower.includes(query)) return false;
-        }
+    function getSearchTerms(query) {
+      const terms = [];
+      const pattern = /"([^"]+)"|(\S+)/g;
+      let match;
+      while ((match = pattern.exec(String(query || ''))) !== null) {
+        const term = (match[1] || match[2] || '').trim().toLocaleLowerCase();
+        if (term && !terms.includes(term)) terms.push(term);
+      }
+      return terms;
+    }
 
+    function noteSearchHaystack(note) {
+      const title = String(note.title || '').toLocaleLowerCase();
+      const content = getSearchableText(note).lower;
+      const category = String(note.category || 'Umum').toLocaleLowerCase();
+      const tags = (Array.isArray(note.tags) ? note.tags : []).join(' ').toLocaleLowerCase();
+      return [title, content, category, tags].join(' ');
+    }
+
+    function noteMatchesSearch(note, terms) {
+      if (!terms.length) return true;
+      const haystack = noteSearchHaystack(note);
+      return terms.every(term => haystack.includes(term));
+    }
+
+    function compareNotes(a, b) {
+      const aTitle = String(a.title || '').toLocaleLowerCase();
+      const bTitle = String(b.title || '').toLocaleLowerCase();
+      const aUpdated = Date.parse(a.updatedAt || a.createdAt || 0) || 0;
+      const bUpdated = Date.parse(b.updatedAt || b.createdAt || 0) || 0;
+      const aCreated = Date.parse(a.createdAt || a.updatedAt || 0) || 0;
+      const bCreated = Date.parse(b.createdAt || b.updatedAt || 0) || 0;
+
+      switch (sortMode) {
+        case 'updated_asc': return aUpdated - bUpdated || aTitle.localeCompare(bTitle, 'id');
+        case 'created_desc': return bCreated - aCreated || aTitle.localeCompare(bTitle, 'id');
+        case 'created_asc': return aCreated - bCreated || aTitle.localeCompare(bTitle, 'id');
+        case 'title_asc': return aTitle.localeCompare(bTitle, 'id', { numeric: true, sensitivity: 'base' });
+        case 'title_desc': return bTitle.localeCompare(aTitle, 'id', { numeric: true, sensitivity: 'base' });
+        case 'updated_desc':
+        default: return bUpdated - aUpdated || aTitle.localeCompare(bTitle, 'id');
+      }
+    }
+
+    function getFilteredNotes() {
+      const terms = getSearchTerms(searchQuery);
+      return notes.filter(note => {
+        if (!noteMatchesSearch(note, terms)) return false;
         if (!matchesDateFilter(note.updatedAt)) return false;
         if (currentFilter === 'pinned') return note.isPinned && !isArchivedNote(note);
         if (currentFilter === 'archive') return isArchivedNote(note);
         if (currentCategory) return (note.category || 'Umum') === currentCategory && !isArchivedNote(note);
         if (currentTag) return note.tags && note.tags.includes(currentTag) && !isArchivedNote(note);
         return !isArchivedNote(note);
-      });
+      }).sort(compareNotes);
+    }
+
+    function highlightSearchText(value, query) {
+      const raw = String(value || '');
+      const terms = getSearchTerms(query).sort((a, b) => b.length - a.length);
+      if (!raw || !terms.length) return escapeHTML(raw);
+      const pattern = new RegExp(terms.map(term => term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'), 'gi');
+      let output = '';
+      let lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(raw)) !== null) {
+        output += escapeHTML(raw.slice(lastIndex, match.index));
+        output += '<mark class="search-highlight">' + escapeHTML(match[0]) + '</mark>';
+        lastIndex = match.index + match[0].length;
+        if (!match[0].length) pattern.lastIndex++;
+      }
+      return output + escapeHTML(raw.slice(lastIndex));
+    }
+
+    function loadSearchHistory() {
+      try {
+        const stored = JSON.parse(localStorage.getItem(SEARCH_HISTORY_KEY) || '[]');
+        recentSearches = Array.isArray(stored)
+          ? stored.filter(value => typeof value === 'string' && value.trim()).slice(0, SEARCH_HISTORY_LIMIT)
+          : [];
+      } catch (error) {
+        recentSearches = [];
+      }
+    }
+
+    function saveSearchHistory() {
+      const value = String(searchQuery || '').trim();
+      if (value.length < 2) return;
+      recentSearches = [value, ...recentSearches.filter(item => item.toLocaleLowerCase() !== value.toLocaleLowerCase())]
+        .slice(0, SEARCH_HISTORY_LIMIT);
+      try { localStorage.setItem(SEARCH_HISTORY_KEY, JSON.stringify(recentSearches)); }
+      catch (error) { console.warn('KeepFlow search history could not be saved:', error); }
+      renderRecentSearches();
+    }
+
+    function renderRecentSearches() {
+      const list = document.getElementById('recent-search-list');
+      if (!list) return;
+      if (!recentSearches.length) {
+        list.innerHTML = '<p class="px-3 py-3 text-xs text-gray-400">Belum ada pencarian tersimpan.</p>';
+        document.getElementById('clear-search-history-btn').classList.add('hidden');
+        return;
+      }
+      document.getElementById('clear-search-history-btn').classList.remove('hidden');
+      list.innerHTML = recentSearches.map(term => `
+        <button type="button" data-recent-search="${escapeHTML(term)}" class="w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm text-gray-600 dark:text-gray-300">
+          <i class="fa-solid fa-clock-rotate-left text-xs text-gray-400"></i>
+          <span class="truncate">${escapeHTML(term)}</span>
+        </button>
+      `).join('');
+    }
+
+    function showRecentSearches() {
+      renderRecentSearches();
+      const panel = document.getElementById('recent-search-panel');
+      panel.classList.remove('hidden');
+      document.getElementById('search-input').setAttribute('aria-expanded', 'true');
+    }
+
+    function hideRecentSearches() {
+      document.getElementById('recent-search-panel').classList.add('hidden');
+      document.getElementById('search-input').setAttribute('aria-expanded', 'false');
     }
 
     function render() {
@@ -1058,8 +1168,8 @@
           <div data-id="${safeId}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow transition cursor-pointer flex items-center justify-between gap-4 group">
             <div class="flex items-center space-x-3 truncate flex-1">
               <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px] font-medium shrink-0"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
-              <span class="font-bold text-gray-900 dark:text-white text-sm shrink-0">${escapeHTML(note.title || 'Tanpa Judul')}</span>
-              <span class="text-gray-500 dark:text-gray-400 text-xs truncate">- ${escapeHTML(plainContent)}</span>
+              <span class="font-bold text-gray-900 dark:text-white text-sm shrink-0">${highlightSearchText(note.title || 'Tanpa Judul', searchQuery)}</span>
+              <span class="text-gray-500 dark:text-gray-400 text-xs truncate">- ${highlightSearchText(plainContent, searchQuery)}</span>
             </div>
             
             <div class="flex items-center space-x-3 shrink-0 text-xs text-gray-400">
@@ -1079,8 +1189,8 @@
                 <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-medium"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
                 ${note.isArchived ? '<span class="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">Arsip</span>' : ''}
               </div>
-              ${note.title ? `<h3 class="font-bold text-gray-900 dark:text-white mb-2 text-base">${escapeHTML(note.title)}</h3>` : ''}
-              <p class="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap line-clamp-6 mb-3">${escapeHTML(plainContent)}</p>
+              ${note.title ? `<h3 class="font-bold text-gray-900 dark:text-white mb-2 text-base">${highlightSearchText(note.title, searchQuery)}</h3>` : ''}
+              <p class="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap line-clamp-6 mb-3">${highlightSearchText(plainContent, searchQuery)}</p>
             </div>
             
             <div>
@@ -1474,7 +1584,7 @@
           format: KEEPFLOW_BACKUP_FORMAT,
           schemaVersion: KEEPFLOW_BACKUP_SCHEMA,
           application: 'Hadi KeepFlow',
-          applicationVersion: '1.3.0.1',
+          applicationVersion: '1.3.1',
           createdAt: snapshot.generatedAt || new Date().toISOString(),
           noteCount: cloudNotes.length,
           categories: [...new Set(['Umum', ...cloudCategories])],
@@ -1955,16 +2065,80 @@
       currentFilter = 'all';
       currentCategory = null;
       currentTag = null;
+      searchQuery = '';
+      searchInput.value = '';
+      clearSearchButton.classList.add('hidden');
+      datePreset = 'all';
+      customStartDate = null;
+      customEndDate = null;
+      document.getElementById('date-preset-select').value = 'all';
+      document.getElementById('custom-date-inputs').classList.add('hidden');
+      document.getElementById('date-filter-panel').classList.add('hidden');
+      document.getElementById('date-filter-toggle').setAttribute('aria-expanded', 'false');
+      hideRecentSearches();
       render();
     });
 
-    document.getElementById('search-input').addEventListener('input', (e) => {
-      searchQuery = e.target.value;
+    const searchInput = document.getElementById('search-input');
+    const clearSearchButton = document.getElementById('clear-search-btn');
+    searchInput.addEventListener('focus', () => {
+      if (!searchQuery.trim()) showRecentSearches();
+    });
+    searchInput.addEventListener('input', (event) => {
+      searchQuery = event.target.value;
+      clearSearchButton.classList.toggle('hidden', !searchQuery);
+      hideRecentSearches();
       if (searchRenderTimer) clearTimeout(searchRenderTimer);
       searchRenderTimer = setTimeout(() => {
         searchRenderTimer = null;
         render();
       }, SEARCH_DEBOUNCE_MS);
+    });
+    searchInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        saveSearchHistory();
+        hideRecentSearches();
+        render();
+      } else if (event.key === 'Escape') {
+        if (searchQuery) {
+          searchInput.value = '';
+          searchQuery = '';
+          clearSearchButton.classList.add('hidden');
+          render();
+        }
+        hideRecentSearches();
+      }
+    });
+    document.getElementById('recent-search-list').addEventListener('click', event => {
+      const button = event.target.closest('[data-recent-search]');
+      if (!button) return;
+      searchQuery = button.dataset.recentSearch || '';
+      searchInput.value = searchQuery;
+      clearSearchButton.classList.toggle('hidden', !searchQuery);
+      hideRecentSearches();
+      render();
+    });
+    clearSearchButton.addEventListener('click', () => {
+      searchInput.value = '';
+      searchQuery = '';
+      clearSearchButton.classList.add('hidden');
+      render();
+      searchInput.focus();
+    });
+    document.getElementById('clear-search-history-btn').addEventListener('click', () => {
+      recentSearches = [];
+      try { localStorage.removeItem(SEARCH_HISTORY_KEY); } catch (error) {}
+      renderRecentSearches();
+    });
+    document.getElementById('sort-notes-select').addEventListener('change', event => {
+      sortMode = event.target.value || 'updated_desc';
+      render();
+    });
+    document.addEventListener('click', event => {
+      if (!event.target.closest('#search-input') && !event.target.closest('#recent-search-panel')) {
+        hideRecentSearches();
+      }
     });
 
     document.getElementById('toggle-theme').addEventListener('click', () => {
@@ -1987,7 +2161,15 @@
     document.getElementById('toggle-sidebar').addEventListener('click', toggleSidebar);
     sidebarBackdrop.addEventListener('click', closeSidebar);
     document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') closeSidebar();
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+      if (event.key === 'Escape') {
+        closeSidebar();
+        hideRecentSearches();
+      }
     });
     window.addEventListener('resize', () => {
       if (!window.matchMedia('(max-width: 1023px)').matches) {
@@ -2032,6 +2214,8 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
+      loadSearchHistory();
+      renderRecentSearches();
       loadInitialData();
     });
   </script>

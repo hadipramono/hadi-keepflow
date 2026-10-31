@@ -57,3 +57,13 @@ If v1.3.0 is already installed, replace only:
 - `AppScripts.html`
 
 No `.gs` file changes are required for this UI hotfix. Save the project and deploy a new version. Run section **F. Progress bar** in `DATA-PORTABILITY-TEST.md`.
+
+
+## v1.3.1 — Phase 3.2 Search & Discovery
+
+If v1.3.0.1 is already installed, replace only:
+- `Index.html`
+- `AppStyles.html`
+- `AppScripts.html`
+
+No `.gs` file changes are required. Save the project and deploy a new version. Existing notes, sync queue, category state, and backup archives remain compatible. Run `SEARCH-DISCOVERY-TEST.md`.

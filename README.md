@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.3.0.1 — Phase 3.1 Backup & Restore Progress UI**
+**v1.3.1 — Phase 3.2 Search & Discovery**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -47,3 +47,7 @@ Data Portability & Backup: ZIP backup, ZIP restore/import, manifest, category st
 
 ## v1.3.0.1 hotfix
 Adds visible progress reporting for ZIP backup and restore/import. See `CHANGELOG-v1.3.0.1-progress-ui.md`.
+
+
+## v1.3.1 — Phase 3.2
+Adds multi-field, multi-term search, quoted phrases, match highlighting, recent search history, sorting, and combined filters. See `CHANGELOG-v1.3.1-phase-3.2.md` and `SEARCH-DISCOVERY-TEST.md`.

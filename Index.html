@@ -71,7 +71,17 @@
       <div class="flex-1 min-w-0 max-w-2xl mx-1 sm:mx-4 flex items-center gap-2">
         <div class="relative flex-1">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-          <input type="text" id="search-input" placeholder="Cari judul atau isi catatan..." class="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 text-sm transition">
+          <input type="search" id="search-input" autocomplete="off" style="appearance:none" aria-controls="recent-search-panel" aria-expanded="false" placeholder="Cari judul, isi, kategori, atau tag... (Ctrl+K)" class="w-full pl-10 pr-10 py-2 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 text-sm transition">
+          <button id="clear-search-btn" type="button" aria-label="Hapus pencarian" title="Hapus pencarian" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
+            <i class="fa-solid fa-circle-xmark"></i>
+          </button>
+          <div id="recent-search-panel" class="hidden absolute left-0 right-0 top-full mt-2 z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl overflow-hidden">
+            <div class="flex items-center justify-between px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+              <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Pencarian Terakhir</span>
+              <button id="clear-search-history-btn" type="button" class="text-[11px] text-blue-600 dark:text-blue-400 hover:underline">Hapus riwayat</button>
+            </div>
+            <div id="recent-search-list" class="max-h-56 overflow-y-auto custom-scrollbar"></div>
+          </div>
         </div>
         <button id="date-filter-toggle" aria-pressed="false" class="px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 flex items-center space-x-2 shrink-0 transition" title="Filter Berdasarkan Tanggal">
           <i class="fa-regular fa-calendar-days"></i>
@@ -177,7 +187,7 @@
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.3.0.1 • Hybrid Drive
+          Hadi KeepFlow v1.3.1 • Hybrid Drive
         </div>
       </aside>
 
@@ -197,7 +207,18 @@
             <h1 id="active-view-title" class="text-lg font-semibold text-gray-800 dark:text-gray-100 truncate">Semua Catatan</h1>
             <p id="active-view-meta" class="text-xs text-gray-400">0 catatan</p>
           </div>
-          <button id="clear-view-filter" type="button" class="hidden text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0">Hapus filter</button>
+          <div class="flex items-center gap-2 shrink-0">
+            <label for="sort-notes-select" class="sr-only">Urutkan catatan</label>
+            <select id="sort-notes-select" class="max-w-[145px] bg-gray-100 dark:bg-gray-800 border-0 rounded-lg px-2 py-2 text-xs text-gray-600 dark:text-gray-300 focus:ring-2 focus:ring-blue-500">
+              <option value="updated_desc">Terbaru diubah</option>
+              <option value="updated_asc">Terlama diubah</option>
+              <option value="created_desc">Terbaru dibuat</option>
+              <option value="created_asc">Terlama dibuat</option>
+              <option value="title_asc">Judul A–Z</option>
+              <option value="title_desc">Judul Z–A</option>
+            </select>
+            <button id="clear-view-filter" type="button" class="hidden text-xs text-blue-600 dark:text-blue-400 hover:underline">Hapus filter</button>
+          </div>
         </div>
 
         <!-- Empty state -->
