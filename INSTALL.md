@@ -33,3 +33,17 @@ If upgrading from v1.2.8.2, replace only:
 - `AppScripts.html`
 
 Save the project and deploy as a **New version**. Do not clear LocalStorage. `Umum` is the only built-in category. Existing `Pekerjaan`, `Pribadi`, and other category folders are not deleted automatically; they remain available if present in Drive or used by notes. A non-default category can be deleted only when its Drive folder contains no files and no subfolders. The folder is moved to Google Drive Trash, not permanently deleted. Run `CATEGORY-MANAGEMENT-TEST.md` after deployment.
+
+
+## v1.3.0 — Phase 3.1 Data Portability & Backup
+
+From v1.2.8.3, replace:
+- `Index.html`
+- `AppScripts.html`
+- `NotesApi.gs`
+
+The page loads JSZip 3.10.1 from jsDelivr for ZIP creation and parsing, so the browser needs access to that CDN when using Backup/Restore.
+
+Then save the Apps Script project and deploy a new version. Open the deployed app online and wait for the initial cloud sync to finish before using Backup ZIP or Restore / Import ZIP.
+
+See `DATA-PORTABILITY-TEST.md` for the full test checklist.

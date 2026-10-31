@@ -24,6 +24,44 @@ function getNotes() {
 }
 
 /**
+ * Return notes and category names from one locked Drive snapshot for backup.
+ * This prevents category and note lists from being read at different moments.
+ */
+function getBackupSnapshot() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const storage = getStorageFolder();
+    const result = [];
+    collectFolderNotes(storage, 'Umum', result);
+
+    const categories = new Set(['Umum']);
+    const folders = storage.getFolders();
+    while (folders.hasNext()) {
+      const folder = folders.next();
+      if (folder.isTrashed()) continue;
+      categories.add(folder.getName());
+      collectFolderNotes(folder, folder.getName(), result);
+    }
+
+    result.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const categoryList = Array.from(categories).sort((a, b) => {
+      if (a === 'Umum') return -1;
+      if (b === 'Umum') return 1;
+      return a.localeCompare(b, 'id');
+    });
+    return {
+      generatedAt: new Date().toISOString(),
+      notes: result,
+      categories: categoryList,
+      noteCount: result.length
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
  * Return category folders stored directly under KeepFlow storage.
  * Empty categories are included even when they do not contain notes yet.
  */

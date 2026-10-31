@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.2.8.3 — Category Management
+    // Hadi KeepFlow v1.3.0 — Phase 3.1 Data Portability & Backup
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -1327,53 +1327,364 @@
       syncToBackend();
     }
 
-    document.getElementById('export-json-btn').addEventListener('click', () => {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `hadi_keepflow_backup_${new Date().toISOString().slice(0,10)}.json`);
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
-    });
 
-    document.getElementById('import-json-file').addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        try {
-          const imported = JSON.parse(event.target.result);
-          if (Array.isArray(imported)) {
-            if (confirm(`Impor ${imported.length} catatan ke Hadi KeepFlow? Data saat ini akan digabungkan atau diperbarui.`)) {
-              const valid = imported.filter(n => n && typeof n === 'object' &&
-                typeof n.title === 'string' && typeof n.content === 'string');
-              const merged = new Map(notes.map(n => [String(n.id), n]));
-              valid.forEach((n, index) => {
-                const id = n.id ? String(n.id) : `import_${Date.now()}_${index}`;
-                merged.set(id, {
-                  id, title: n.title, content: n.content,
-                  category: n.category || 'Umum',
-                  isPinned: Boolean(n.isPinned), isArchived: Boolean(n.isArchived),
-                  tags: Array.isArray(n.tags) ? n.tags.filter(t => typeof t === 'string') : [],
-                  createdAt: n.createdAt || new Date().toISOString(),
-                  updatedAt: n.updatedAt || new Date().toISOString()
-                });
-              });
-              const before = notes.map(n => ({ ...n }));
-              notes = [...merged.values()];
-              render();
-              syncToBackend();
-              alert(`Berhasil mengimpor ${valid.length} catatan. Data lokal yang tidak ada di backup tetap dipertahankan.`);
-            }
-          } else {
-            alert('Format file JSON tidak valid.');
-          }
-        } catch(err) {
-          alert('Gagal membaca file JSON.');
+    // ---------------------------------------------------------------------
+    // Phase 3.1 — ZIP backup, restore, import preview, and duplicate checks
+    // ---------------------------------------------------------------------
+    const KEEPFLOW_BACKUP_FORMAT = 'hadi-keepflow-backup';
+    const KEEPFLOW_BACKUP_SCHEMA = 1;
+    const MAX_IMPORT_ZIP_BYTES = 25 * 1024 * 1024;
+    const MAX_IMPORT_ENTRIES = 2000;
+    const MAX_IMPORT_NOTE_BYTES = 500000;
+
+    function callKeepFlowServer(method, ...args) {
+      return new Promise((resolve, reject) => {
+        if (typeof google === 'undefined' || !google.script || !google.script.run) {
+          reject(new Error('Google Apps Script tidak tersedia.'));
+          return;
         }
+        const runner = google.script.run
+          .withSuccessHandler(resolve)
+          .withFailureHandler(error => reject(new Error(error && error.message ? error.message : String(error))));
+        if (typeof runner[method] !== 'function') {
+          reject(new Error('Fungsi server tidak tersedia: ' + method));
+          return;
+        }
+        runner[method](...args);
+      });
+    }
+
+    function safeBackupSegment(value, fallback) {
+      const cleaned = String(value || '')
+        .replace(/[\/\\?%*:|"<>]/g, '-')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/[. ]+$/g, '')
+        .slice(0, 180);
+      return cleaned || fallback;
+    }
+
+    function makeBackupNoteFile(note) {
+      const metadata = {
+        isPinned: Boolean(note.isPinned),
+        isArchived: Boolean(note.isArchived),
+        tags: Array.isArray(note.tags) ? note.tags.filter(tag => typeof tag === 'string') : [],
+        createdAt: note.createdAt || new Date().toISOString()
       };
-      reader.readAsText(file);
+      return '---JSON---\n' + JSON.stringify(metadata, null, 2) +
+        '\n---JSON---\n\n' + String(note.content || '');
+    }
+
+    function downloadBlob(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    function ensureBackupReady() {
+      if (!navigator.onLine) throw new Error('Backup dan restore memerlukan koneksi internet.');
+      if (typeof JSZip === 'undefined') throw new Error('Library ZIP belum termuat. Muat ulang aplikasi dan coba lagi.');
+      if (syncRunning || cloudLoadInProgress || pendingOperations.length > 0 || pendingCategoryCreates.length > 0) {
+        throw new Error('Masih ada proses sinkronisasi atau antrean tertunda. Tunggu sampai status tersinkron, lalu coba lagi.');
+      }
+      if (editorDraftDirty) throw new Error('Simpan atau batalkan draft editor terlebih dahulu sebelum backup/restore.');
+      if (!serverReady) throw new Error('Data cloud belum siap. Tunggu proses pemuatan selesai.');
+    }
+
+    async function createKeepFlowBackup() {
+      ensureBackupReady();
+      const button = document.getElementById('backup-zip-btn');
+      button.disabled = true;
+      button.classList.add('opacity-50');
+      setSyncStatus('Menyiapkan backup ZIP...', 'fa-circle-notch fa-spin', 'text-blue-500');
+      try {
+        // Fetch an authoritative cloud snapshot rather than trusting a possibly stale local cache.
+        const snapshot = await callKeepFlowServer('getBackupSnapshot');
+        if (!snapshot || !Array.isArray(snapshot.notes) || !Array.isArray(snapshot.categories)) {
+          throw new Error('Respons snapshot cloud tidak valid.');
+        }
+        const cloudNotes = snapshot.notes;
+        const cloudCategories = snapshot.categories;
+
+        const zip = new JSZip();
+        const manifest = {
+          format: KEEPFLOW_BACKUP_FORMAT,
+          schemaVersion: KEEPFLOW_BACKUP_SCHEMA,
+          application: 'Hadi KeepFlow',
+          applicationVersion: '1.3.0',
+          createdAt: snapshot.generatedAt || new Date().toISOString(),
+          noteCount: cloudNotes.length,
+          categories: [...new Set(['Umum', ...cloudCategories])],
+          notes: []
+        };
+
+        cloudNotes.forEach((note, index) => {
+          const category = safeBackupSegment(note.category || 'Umum', 'Umum').slice(0, 120);
+          const title = safeBackupSegment(note.title || ('Catatan ' + (index + 1)), 'Catatan Tanpa Judul');
+          const filename = title + '.md';
+          const path = category + '/' + filename;
+          // JSZip creates the directory entries, including categories with zero notes.
+          zip.file(path, makeBackupNoteFile(note));
+          manifest.notes.push({
+            path,
+            category,
+            title,
+            originalId: String(note.id || ''),
+            updatedAt: note.updatedAt || ''
+          });
+        });
+        manifest.categories.forEach(category => zip.folder(safeBackupSegment(category, 'Umum')));
+        zip.file('manifest.json', JSON.stringify(manifest, null, 2));
+
+        const blob = await zip.generateAsync({
+          type: 'blob',
+          compression: 'DEFLATE',
+          compressionOptions: { level: 6 }
+        });
+        downloadBlob(blob, 'hadi_keepflow_backup_' + new Date().toISOString().slice(0, 10) + '.zip');
+        setSyncStatus('Backup ZIP berhasil dibuat', 'fa-cloud-arrow-down', 'text-green-500');
+        alert('Backup selesai. ' + cloudNotes.length + ' catatan dan ' + manifest.categories.length + ' kategori disimpan ke ZIP.');
+      } catch (error) {
+        console.error('KeepFlow backup error:', error);
+        setSyncStatus('Backup gagal', 'fa-triangle-exclamation', 'text-red-500');
+        alert('Backup gagal: ' + error.message);
+      } finally {
+        button.disabled = false;
+        button.classList.remove('opacity-50');
+      }
+    }
+
+    function parseBackupNoteFile(rawText, path) {
+      let content = String(rawText || '');
+      let metadata = {};
+      if (content.startsWith('---JSON---')) {
+        const parts = content.split('---JSON---');
+        if (parts.length >= 3) {
+          try {
+            metadata = JSON.parse(parts[1].trim()) || {};
+            content = parts.slice(2).join('---JSON---').replace(/^\s+/, '');
+          } catch (error) {
+            throw new Error('Metadata JSON tidak valid pada ' + path);
+          }
+        }
+      }
+      const segments = path.split('/').filter(Boolean);
+      const category = segments.length > 1 ? segments[segments.length - 2] : 'Umum';
+      const filename = segments[segments.length - 1] || '';
+      const title = filename.replace(/\.(md|txt)$/i, '');
+      if (!title || title.length > 180 || category.length > 120 || content.length > MAX_IMPORT_NOTE_BYTES) {
+        throw new Error('Judul, kategori, atau isi catatan tidak memenuhi batas ukuran pada ' + path);
+      }
+      const tags = Array.isArray(metadata.tags) ? metadata.tags.filter(tag => typeof tag === 'string' && tag.length <= 60).slice(0, 50) : [];
+      return {
+        id: 'import_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10),
+        title,
+        content,
+        category: category || 'Umum',
+        isPinned: metadata.isPinned === true || metadata.isPinned === 1 || String(metadata.isPinned).toLowerCase() === 'true',
+        isArchived: metadata.isArchived === true || metadata.isArchived === 1 || String(metadata.isArchived).toLowerCase() === 'true',
+        tags,
+        createdAt: metadata.createdAt || new Date().toISOString()
+      };
+    }
+
+    function importDuplicateKey(note) {
+      return (String(note.category || 'Umum').trim().toLocaleLowerCase() + '\u0000' +
+        String(note.title || '').trim().toLocaleLowerCase());
+    }
+
+    function importContentSignature(note) {
+      return String(note.content || '');
+    }
+
+    async function inspectKeepFlowZip(file) {
+      if (!file || !/\.zip$/i.test(file.name)) throw new Error('Pilih file ZIP KeepFlow.');
+      if (file.size > MAX_IMPORT_ZIP_BYTES) throw new Error('Ukuran ZIP melebihi batas 25 MB.');
+      const zip = await JSZip.loadAsync(file, { checkCRC32: true });
+      const entries = Object.values(zip.files).filter(entry => !entry.dir && /\.(md|txt)$/i.test(entry.name));
+      if (entries.length > MAX_IMPORT_ENTRIES) throw new Error('ZIP berisi terlalu banyak file (maksimal 2.000 catatan).');
+      // Reject oversized expanded entries before decompressing them into browser memory.
+      let declaredExpandedBytes = 0;
+      for (const entry of entries) {
+        const expandedSize = entry._data && Number(entry._data.uncompressedSize);
+        if (!Number.isFinite(expandedSize) || expandedSize < 0 || expandedSize > MAX_IMPORT_NOTE_BYTES + 20000) {
+          throw new Error('Ukuran file di dalam ZIP tidak valid atau terlalu besar: ' + entry.name);
+        }
+        declaredExpandedBytes += expandedSize;
+        if (declaredExpandedBytes > MAX_IMPORT_ZIP_BYTES) {
+          throw new Error('Total ukuran hasil ekstraksi ZIP melebihi 25 MB.');
+        }
+      }
+
+      let manifest = null;
+      if (zip.file('manifest.json')) {
+        try {
+          manifest = JSON.parse(await zip.file('manifest.json').async('string'));
+          if (manifest.format !== KEEPFLOW_BACKUP_FORMAT || manifest.schemaVersion !== KEEPFLOW_BACKUP_SCHEMA) {
+            throw new Error('Versi format backup tidak didukung.');
+          }
+        } catch (error) {
+          throw new Error('Manifest backup tidak valid: ' + error.message);
+        }
+      }
+
+      const imported = [];
+      const invalid = [];
+      let totalBytes = 0;
+      for (const entry of entries) {
+        try {
+          if (entry.name.startsWith('/') || entry.name.includes('\\') || /^[A-Za-z]:/.test(entry.name)) {
+            throw new Error('Path file tidak aman.');
+          }
+          const segments = entry.name.split('/').filter(Boolean);
+          if (segments.length < 1 || segments.length > 2 || segments.some(part => part === '.' || part === '..')) {
+            throw new Error('Struktur folder tidak didukung.');
+          }
+          const raw = await entry.async('string');
+          totalBytes += new Blob([raw]).size;
+          if (totalBytes > MAX_IMPORT_ZIP_BYTES) throw new Error('Total data hasil ekstraksi melebihi 25 MB.');
+          imported.push(parseBackupNoteFile(raw, entry.name));
+        } catch (error) {
+          invalid.push({ path: entry.name, message: error.message });
+        }
+      }
+
+      const importedCategories = new Set();
+      if (manifest && Array.isArray(manifest.categories)) {
+        manifest.categories.forEach(name => {
+          if (typeof name === 'string' && name.trim() && name.length <= 120) importedCategories.add(name.trim());
+        });
+        if (importedCategories.size > 500) throw new Error('Backup mencantumkan terlalu banyak kategori (maksimal 500).');
+      }
+      imported.forEach(note => importedCategories.add(note.category));
+      importedCategories.add('Umum');
+
+      const currentByKey = new Map();
+      notes.forEach(note => {
+        const key = importDuplicateKey(note);
+        if (!currentByKey.has(key)) currentByKey.set(key, []);
+        currentByKey.get(key).push(note);
+      });
+
+      const newNotes = [];
+      let exactDuplicates = 0;
+      let titleConflicts = 0;
+      imported.forEach(note => {
+        const matches = currentByKey.get(importDuplicateKey(note)) || [];
+        if (!matches.length) {
+          newNotes.push(note);
+          currentByKey.set(importDuplicateKey(note), [note]);
+          return;
+        }
+        if (matches.some(existing => importContentSignature(existing) === importContentSignature(note))) {
+          exactDuplicates++;
+        } else {
+          titleConflicts++;
+        }
+      });
+
+      return {
+        notes: newNotes,
+        categories: [...importedCategories],
+        exactDuplicates,
+        titleConflicts,
+        invalid,
+        sourceNoteCount: entries.length,
+        manifest
+      };
+    }
+
+    async function saveImportedNote(note, index) {
+      const result = await callKeepFlowServer('saveNote', note, 'zip-import-' + Date.now() + '-' + index + '-' + Math.random().toString(36).slice(2, 8));
+      if (!result || result.status !== 'success' || !result.note) {
+        throw new Error((result && result.message) || 'Server tidak mengonfirmasi penyimpanan catatan.');
+      }
+      return result.note;
+    }
+
+    async function restoreKeepFlowZip(file) {
+      const input = document.getElementById('restore-zip-file');
+      input.disabled = true;
+      try {
+        ensureBackupReady();
+        setSyncStatus('Memeriksa arsip ZIP...', 'fa-circle-notch fa-spin', 'text-blue-500');
+        const preview = await inspectKeepFlowZip(file);
+        const invalidCount = preview.invalid.length;
+        const summary = [
+          'Ringkasan restore/import:',
+          '• Catatan dalam ZIP: ' + preview.sourceNoteCount,
+          '• Catatan baru: ' + preview.notes.length,
+          '• Duplikat identik (akan dilewati): ' + preview.exactDuplicates,
+          '• Judul sama, isi berbeda (akan dilewati): ' + preview.titleConflicts,
+          '• File tidak valid (akan dilewati): ' + invalidCount,
+          '• Kategori: ' + preview.categories.length,
+          '',
+          'Data yang sudah ada tidak akan dihapus atau ditimpa.',
+          'Lanjutkan?'
+        ].join('\n');
+        if (!confirm(summary)) {
+          setSyncStatus('Restore dibatalkan', 'fa-cloud', 'text-gray-400');
+          return;
+        }
+
+        let categoriesCreated = 0;
+        for (const category of preview.categories) {
+          if (category.toLocaleLowerCase() === 'umum') continue;
+          const response = await callKeepFlowServer('createCategoryFolder', category);
+          if (!response || response.status !== 'success') {
+            throw new Error((response && response.message) || ('Gagal membuat kategori ' + category));
+          }
+          categoriesCreated++;
+        }
+
+        let saved = 0;
+        const importedNotes = [];
+        for (let i = 0; i < preview.notes.length; i++) {
+          setSyncStatus('Memulihkan catatan ' + (i + 1) + ' dari ' + preview.notes.length + '...', 'fa-circle-notch fa-spin', 'text-blue-500');
+          const savedNote = await saveImportedNote(preview.notes[i], i);
+          importedNotes.push(savedNote);
+          saved++;
+        }
+
+        // Merge into local state only after each cloud write has been acknowledged.
+        const byId = new Map(notes.map(note => [String(note.id), note]));
+        importedNotes.forEach(note => byId.set(String(note.id), note));
+        notes = [...byId.values()];
+        lastObservedNotes = cloneData(notes);
+        persistLocal();
+        reconcileCloudCategories(await callKeepFlowServer('getCategories'));
+        render();
+        setSyncStatus('Restore selesai', 'fa-cloud-arrow-up', 'text-green-500');
+        alert(
+          'Restore selesai.\n' +
+          'Catatan ditambahkan: ' + saved + '\n' +
+          'Duplikat dilewati: ' + preview.exactDuplicates + '\n' +
+          'Konflik judul dilewati: ' + preview.titleConflicts + '\n' +
+          'File tidak valid dilewati: ' + invalidCount + '\n' +
+          'Kategori diperiksa/dibuat: ' + categoriesCreated + '\n\n' +
+          'Catatan yang sudah ada tidak dihapus atau ditimpa.'
+        );
+      } catch (error) {
+        console.error('KeepFlow restore error:', error);
+        setSyncStatus('Restore berhenti - periksa data cloud', 'fa-triangle-exclamation', 'text-red-500');
+        alert('Restore tidak selesai: ' + error.message + '\n\nCatatan yang sudah berhasil disimpan tetap berada di Google Drive. Jalankan restore lagi untuk melanjutkan; duplikat akan dilewati.');
+        // Refresh cloud state after a partial restore so the UI reflects acknowledged writes.
+        try { loadInitialData(); } catch (refreshError) { console.warn(refreshError); }
+      } finally {
+        input.disabled = false;
+        input.value = '';
+      }
+    }
+
+    document.getElementById('backup-zip-btn').addEventListener('click', createKeepFlowBackup);
+    document.getElementById('restore-zip-file').addEventListener('change', event => {
+      const file = event.target.files && event.target.files[0];
+      if (file) restoreKeepFlowZip(file);
     });
 
     document.getElementById('toggle-view-mode').addEventListener('click', () => {

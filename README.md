@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.2.8.3 — Category Management**
+**v1.3.0 — Phase 3.1 Data Portability & Backup**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -39,3 +39,7 @@ Fixes newly created categories not appearing in the sidebar/editor category list
 - Categories containing any Drive file or nested folder are protected by a server-side check.
 - Archived notes are included in the UI count and prevent deletion.
 - Cloud category reconciliation removes stale local-only default entries while retaining categories used by notes and pending category creation.
+
+
+## Latest release: v1.3.0 — Phase 3.1
+Data Portability & Backup: ZIP backup, ZIP restore/import, manifest, category structure, metadata preservation, import preview, duplicate detection, and merge-only restore. See `CHANGELOG-v1.3.0-phase-3.1.md` and `DATA-PORTABILITY-TEST.md`.

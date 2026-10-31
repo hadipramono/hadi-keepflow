@@ -19,6 +19,7 @@
   <link rel="icon" type="image/svg+xml" href="https://lh3.googleusercontent.com/d/1xJCyEH2-mS08C3yiKictMokXSfxN1UEH">
   <link rel="apple-touch-icon" href="https://lh3.googleusercontent.com/d/1xJCyEH2-mS08C3yiKictMokXSfxN1UEH">
 
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -163,20 +164,20 @@
             Backup & Data
           </div>
           <div class="space-y-1">
-            <button id="export-json-btn" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50">
-              <i class="fa-solid fa-download w-5 text-center text-green-500"></i>
-              <span>Export JSON</span>
+            <button id="backup-zip-btn" type="button" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50">
+              <i class="fa-solid fa-file-zipper w-5 text-center text-green-500"></i>
+              <span>Backup ZIP</span>
             </button>
             <label class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer">
-              <i class="fa-solid fa-upload w-5 text-center text-blue-500"></i>
-              <span>Import JSON</span>
-              <input type="file" id="import-json-file" accept=".json" class="hidden">
+              <i class="fa-solid fa-box-open w-5 text-center text-blue-500"></i>
+              <span>Restore / Import ZIP</span>
+              <input type="file" id="restore-zip-file" accept=".zip,application/zip" class="hidden">
             </label>
           </div>
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.2.8 • Hybrid Drive
+          Hadi KeepFlow v1.3.0 • Hybrid Drive
         </div>
       </aside>
 
