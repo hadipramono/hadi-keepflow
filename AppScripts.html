@@ -22,6 +22,87 @@
     let customEndDate = null;
 
     const LOCAL_KEY = 'hadi_keepflow_offline_notes_v1';
+    const CATEGORY_STATE_KEY = 'hadi_keepflow_categories_v1';
+    const DEFAULT_CATEGORIES = ['Umum', 'Pekerjaan', 'Pribadi'];
+    let categories = [...DEFAULT_CATEGORIES];
+    let pendingCategoryCreates = [];
+
+    function loadCategoryState() {
+      try {
+        const state = JSON.parse(localStorage.getItem(CATEGORY_STATE_KEY) || '{}');
+        categories = [...new Set([...DEFAULT_CATEGORIES, ...(Array.isArray(state.categories) ? state.categories : [])])];
+        pendingCategoryCreates = Array.isArray(state.pendingCreates) ? state.pendingCreates.filter(name => typeof name === 'string') : [];
+      } catch (error) {
+        categories = [...DEFAULT_CATEGORIES];
+        pendingCategoryCreates = [];
+      }
+    }
+
+    function persistCategoryState() {
+      try {
+        localStorage.setItem(CATEGORY_STATE_KEY, JSON.stringify({ categories, pendingCreates: pendingCategoryCreates }));
+      } catch (error) {
+        console.error('KeepFlow category persistence error:', error);
+      }
+    }
+
+    function mergeCategories(names) {
+      if (!Array.isArray(names)) return;
+      categories = [...new Set([...DEFAULT_CATEGORIES, ...categories, ...names.map(name => String(name).trim()).filter(Boolean)])];
+      persistCategoryState();
+      renderCategories();
+    }
+
+    function syncPendingCategoryCreates() {
+      if (!pendingCategoryCreates.length || !navigator.onLine ||
+          typeof google === 'undefined' || !google.script || !google.script.run) return;
+      const category = pendingCategoryCreates[0];
+      google.script.run
+        .withSuccessHandler(response => {
+          if (!response || response.status !== 'success') {
+            setSyncStatus((response && response.message) || 'Kategori belum tersimpan di cloud', 'fa-triangle-exclamation', 'text-amber-500');
+            return;
+          }
+          pendingCategoryCreates = pendingCategoryCreates.filter(name => name !== category);
+          mergeCategories(response.categories || [response.category]);
+          persistCategoryState();
+          if (pendingCategoryCreates.length) syncPendingCategoryCreates();
+        })
+        .withFailureHandler(error => {
+          console.error('KeepFlow create category error:', error);
+          setSyncStatus('Gagal menyimpan kategori - akan dicoba lagi saat online', 'fa-triangle-exclamation', 'text-amber-500');
+        })
+        .createCategoryFolder(category);
+    }
+
+    function refreshCloudCategories() {
+      if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) return;
+      google.script.run
+        .withSuccessHandler(names => {
+          mergeCategories(names);
+          syncPendingCategoryCreates();
+        })
+        .withFailureHandler(error => {
+          console.warn('KeepFlow category load failed:', error);
+          syncPendingCategoryCreates();
+        })
+        .getCategories();
+    }
+
+    function addCategory(categoryName) {
+      const name = String(categoryName || '').replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
+      if (!name) return;
+      const existing = categories.find(item => item.toLowerCase() === name.toLowerCase());
+      const finalName = existing || name;
+      mergeCategories([finalName]);
+      currentCategory = finalName;
+      currentFilter = 'category';
+      currentTag = null;
+      if (!pendingCategoryCreates.includes(finalName)) pendingCategoryCreates.push(finalName);
+      persistCategoryState();
+      render();
+      syncPendingCategoryCreates();
+    }
 
     function updateToolbarState() {
       document.querySelectorAll('.toolbar-btn').forEach(btn => {
@@ -482,6 +563,7 @@
     }
 
     function loadInitialData() {
+      loadCategoryState();
       // Never reconcile a cloud snapshot while a write is in flight. The
       // snapshot could predate that write and reintroduce stale data.
       if (syncRunning) {
@@ -561,6 +643,7 @@
           lastObservedNotes = cloneData(notes);
           persistLocal();
           render();
+          refreshCloudCategories();
 
           if (refreshRequested) {
             refreshRequested = false;
@@ -853,9 +936,9 @@
     }
 
     function renderCategories() {
-      const defaultCats = ['Pekerjaan', 'Pribadi', 'Umum'];
       const categoryCounts = new Map();
-      const activeCatsSet = new Set(defaultCats);
+      const activeCatsSet = new Set([...DEFAULT_CATEGORIES, ...categories]);
+      if (currentCategory) activeCatsSet.add(currentCategory);
 
       // One pass replaces the previous category-count nested filtering.
       notes.forEach(note => {
@@ -1266,13 +1349,7 @@
     document.getElementById('add-category-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       const newCat = prompt('Masukkan nama kategori baru:');
-      if (newCat && newCat.trim()) {
-        currentCategory = newCat.trim();
-        currentFilter = 'category';
-        currentTag = null;
-        render();
-        syncToBackend();
-      }
+      if (newCat && newCat.trim()) addCategory(newCat);
     });
 
     document.getElementById('quick-add-trigger').addEventListener('click', () => openEditor(null));

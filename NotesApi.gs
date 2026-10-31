@@ -23,6 +23,47 @@ function getNotes() {
   }
 }
 
+/**
+ * Return category folders stored directly under KeepFlow storage.
+ * Empty categories are included even when they do not contain notes yet.
+ */
+function getCategories() {
+  const storage = getStorageFolder();
+  const names = new Set(['Pekerjaan', 'Pribadi', 'Umum']);
+  const folders = storage.getFolders();
+  while (folders.hasNext()) {
+    const folder = folders.next();
+    if (!folder.isTrashed()) names.add(folder.getName());
+  }
+  return Array.from(names).sort((a, b) => {
+    if (a === 'Umum') return -1;
+    if (b === 'Umum') return 1;
+    return a.localeCompare(b, 'id');
+  });
+}
+
+/** Create an empty category folder. Safe to call repeatedly. */
+function createCategoryFolder(categoryName) {
+  const rawCategory = String(categoryName == null ? '' : categoryName).trim();
+  if (!rawCategory) {
+    return { status: 'error', message: 'Nama kategori tidak boleh kosong.' };
+  }
+  const category = safeName(rawCategory, '');
+  if (!category || category.length > 120) {
+    return { status: 'error', message: 'Nama kategori tidak valid (maksimal 120 karakter).' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const storage = getStorageFolder();
+    const folder = getOrCreateSubFolder(storage, category);
+    return { status: 'success', category: folder.getName(), categories: getCategories() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 function validateNotePayload(note) {
   if (!note || typeof note !== 'object' || Array.isArray(note)) {
     throw new Error('Data catatan tidak valid.');

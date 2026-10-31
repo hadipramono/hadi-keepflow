@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.2.8 — Tahap 2.4: Maintainability & Code Structure**
+**v1.2.8.2 — Category Persistence Fix**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -26,3 +26,7 @@ Run `MAINTAINABILITY-TEST.md` plus the existing sync, offline, security, conflic
 ## Hotfix v1.2.8.1
 
 Fixes a documentation-comment boundary in `DriveStorage.gs` that hid the storage folder helper declarations. Replace the backend file `DriveStorage.gs` with this hotfix version. No other project files need to change.
+
+
+## Hotfix v1.2.8.2
+Fixes newly created categories not appearing in the sidebar/editor category list and not surviving reload. Adds a Drive category-folder API and a local pending category queue. See `CATEGORY-PERSISTENCE-TEST.md`.

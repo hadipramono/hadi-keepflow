@@ -16,3 +16,12 @@ Tidak perlu menghapus LocalStorage. Jangan mengganti nama key antrean atau draft
 ## Hotfix v1.2.8.1
 
 If upgrading from v1.2.8, replace only `DriveStorage.gs` with the file in this package, save, and deploy a new Apps Script version. Do not delete or reset LocalStorage.
+
+
+## Hotfix v1.2.8.2 — Category persistence
+
+If upgrading from v1.2.8.1, replace only these two files:
+- `NotesApi.gs`
+- `AppScripts.html`
+
+Save and deploy as a **New version**. Do not clear LocalStorage. Existing note data and sync queue keys are preserved. Run `CATEGORY-PERSISTENCE-TEST.md`.
