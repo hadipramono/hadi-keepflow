@@ -1,0 +1,921 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Hadi KeepFlow - Personal Hybrid Notes</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <meta name="theme-color" content="#2563eb">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Hadi KeepFlow">
+
+  <link rel="manifest" href='data:application/manifest+json;charset=utf-8,{"name":"Hadi KeepFlow","short_name":"KeepFlow","start_url":".","display":"standalone","background_color":"%230f172a","theme_color":"%232563eb","icons":[{"src":"https://lh3.googleusercontent.com/d/1xJCyEH2-mS08C3yiKictMokXSfxN1UEH","sizes":"512x512","type":"image/svg+xml"}]}'>
+  
+  <!-- Custom Icon from Google Drive -->
+  <link rel="icon" type="image/svg+xml" href="https://lh3.googleusercontent.com/d/1xJCyEH2-mS08C3yiKictMokXSfxN1UEH">
+  <link rel="apple-touch-icon" href="https://lh3.googleusercontent.com/d/1xJCyEH2-mS08C3yiKictMokXSfxN1UEH">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <style>
+    .view-grid {
+      column-count: 1;
+      column-gap: 1rem;
+    }
+    @media (min-width: 640px) { .view-grid { column-count: 2; } }
+    @media (min-width: 1024px) { .view-grid { column-count: 3; } }
+    @media (min-width: 1280px) { .view-grid { column-count: 4; } }
+    
+    .view-grid .masonry-item {
+      break-inside: avoid;
+      margin-bottom: 1rem;
+    }
+
+    .view-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      max-width: 100%;
+    }
+    .view-list .masonry-item {
+      margin-bottom: 0;
+      width: 100%;
+      padding: 0.75rem 1rem !important;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background-color: rgba(156, 163, 175, 0.5);
+      border-radius: 3px;
+    }
+    [contenteditable]:empty:before {
+      content: attr(placeholder);
+      color: #9ca3af;
+      pointer-events: none;
+      display: block;
+    }
+    .toolbar-btn.active {
+      background-color: rgba(59, 130, 246, 0.15);
+      color: #3b82f6;
+    }
+    .dark .toolbar-btn.active {
+      background-color: rgba(59, 130, 246, 0.3);
+      color: #60a5fa;
+    }
+    .action-btn.active {
+      background-color: rgba(59, 130, 246, 0.15) !important;
+      color: #3b82f6 !important;
+    }
+    .dark .action-btn.active {
+      background-color: rgba(59, 130, 246, 0.3) !important;
+      color: #60a5fa !important;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans antialiased min-h-screen transition-colors duration-200">
+
+  <!-- Global Loading Overlay -->
+  <div id="global-loader" class="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white transition-opacity duration-300">
+    <div class="bg-white dark:bg-gray-800 px-6 py-4 rounded-2xl shadow-xl flex items-center space-x-4 border border-gray-200 dark:border-gray-700">
+      <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl"></i>
+      <div>
+        <p class="font-semibold text-sm text-gray-800 dark:text-white">Memuat Hadi KeepFlow...</p>
+        <p class="text-xs text-gray-400" id="loader-text">Menyiapkan data lokal...</p>
+      </div>
+    </div>
+  </div>
+
+  <div id="app" class="flex flex-col h-screen overflow-hidden">
+    <!-- Top Header -->
+    <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 z-20 shrink-0">
+      <div class="flex items-center space-x-3">
+        <button id="toggle-sidebar" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+          <i class="fa-solid fa-bars text-lg"></i>
+        </button>
+        <div class="flex items-center space-x-2">
+          <img src="https://lh3.googleusercontent.com/d/1xJCyEH2-mS08C3yiKictMokXSfxN1UEH" alt="Logo" class="w-8 h-8 rounded-lg shadow-md object-cover">
+          <span class="font-bold text-lg tracking-wide hidden sm:inline">Hadi KeepFlow</span>
+        </div>
+      </div>
+
+      <!-- Search Bar & Date Filter -->
+      <div class="flex-1 max-w-2xl mx-4 flex items-center gap-2">
+        <div class="relative flex-1">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
+          <input type="text" id="search-input" placeholder="Cari judul atau isi catatan..." class="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 text-sm transition">
+        </div>
+        <button id="date-filter-toggle" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 flex items-center space-x-2 shrink-0 transition" title="Filter Berdasarkan Tanggal">
+          <i class="fa-regular fa-calendar-days"></i>
+          <span id="date-filter-label" class="hidden md:inline">Semua Tanggal</span>
+        </button>
+      </div>
+
+      <!-- Actions Right -->
+      <div class="flex items-center space-x-2">
+        <button id="toggle-view-mode" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 transition" title="Tampilan Daftar (List)">
+          <i id="view-mode-icon" class="fa-solid fa-list text-lg"></i>
+        </button>
+        
+        <button id="toggle-theme" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+          <i id="theme-icon" class="fa-solid fa-moon text-lg"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Sub-Header Panel untuk Filter Tanggal -->
+    <div id="date-filter-panel" class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-3 hidden flex flex-wrap items-center justify-between gap-4 z-10 shrink-0 text-sm">
+      <div class="flex items-center space-x-2">
+        <span class="text-gray-500 font-medium">Rentang Tanggal:</span>
+        <select id="date-preset-select" class="bg-gray-100 dark:bg-gray-700 border-0 rounded-lg px-3 py-1.5 text-gray-700 dark:text-gray-200 focus:ring-2 focus:ring-blue-500">
+          <option value="all">Semua Tanggal</option>
+          <option value="today">Hari Ini</option>
+          <option value="7days">7 Hari Terakhir</option>
+          <option value="30days">30 Hari Terakhir</option>
+          <option value="custom">Rentang Kustom...</option>
+        </select>
+      </div>
+
+      <div id="custom-date-inputs" class="flex items-center space-x-2 hidden">
+        <span class="text-xs text-gray-400">Dari:</span>
+        <input type="date" id="start-date-input" class="bg-gray-100 dark:bg-gray-700 border-0 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200">
+        <span class="text-xs text-gray-400">Sampai:</span>
+        <input type="date" id="end-date-input" class="bg-gray-100 dark:bg-gray-700 border-0 rounded-lg px-2 py-1 text-xs text-gray-700 dark:text-gray-200">
+        <button id="apply-date-range" class="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded-lg font-medium transition">Terapkan</button>
+      </div>
+
+      <button id="reset-date-filter" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Reset Filter</button>
+    </div>
+
+    <!-- Main Container -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Sidebar -->
+      <aside id="sidebar" class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col justify-between shrink-0 transition-all duration-200 overflow-y-auto custom-scrollbar">
+        <div class="p-4 space-y-1">
+          <button data-filter="all" class="nav-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium">
+            <i class="fa-solid fa-lightbulb w-5 text-center"></i>
+            <span>Semua Catatan</span>
+          </button>
+          <button data-filter="pinned" class="nav-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 font-medium">
+            <i class="fa-solid fa-thumbtack w-5 text-center"></i>
+            <span>Disematkan</span>
+          </button>
+          <button data-filter="archive" class="nav-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 font-medium">
+            <i class="fa-solid fa-box-archive w-5 text-center"></i>
+            <span>Arsip</span>
+          </button>
+
+          <!-- Kategori Section -->
+          <div class="pt-4 pb-2 px-3 flex items-center justify-between text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            <span>Kategori</span>
+            <button id="add-category-btn" class="hover:text-blue-500 transition" title="Tambah Kategori"><i class="fa-solid fa-plus text-sm"></i></button>
+          </div>
+          <div id="categories-list" class="space-y-1"></div>
+
+          <!-- Label Section -->
+          <div class="pt-4 pb-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Label
+          </div>
+          <div id="tags-list" class="space-y-1"></div>
+
+          <!-- Backup & Restore Section -->
+          <div class="pt-6 pb-2 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Backup & Data
+          </div>
+          <div class="space-y-1">
+            <button id="export-json-btn" class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50">
+              <i class="fa-solid fa-download w-5 text-center text-green-500"></i>
+              <span>Export JSON</span>
+            </button>
+            <label class="w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 cursor-pointer">
+              <i class="fa-solid fa-upload w-5 text-center text-blue-500"></i>
+              <span>Import JSON</span>
+              <input type="file" id="import-json-file" accept=".json" class="hidden">
+            </label>
+          </div>
+        </div>
+
+        <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
+          Hadi KeepFlow v1.0 • Hybrid Drive
+        </div>
+      </aside>
+
+      <!-- Main Content Area -->
+      <main class="flex-1 overflow-y-auto p-4 sm:p-6 custom-scrollbar">
+        <!-- Quick Note Trigger Bar -->
+        <div class="max-w-4xl mx-auto mb-6">
+          <div id="quick-add-trigger" class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 flex items-center justify-between cursor-pointer hover:shadow-md transition">
+            <span class="text-gray-400 text-sm">Buat catatan baru...</span>
+            <i class="fa-solid fa-pen-to-square text-gray-400"></i>
+          </div>
+        </div>
+
+        <!-- Pinned Section -->
+        <div id="pinned-section" class="max-w-4xl mx-auto mb-6 hidden">
+          <h2 class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1">Disematkan</h2>
+          <div id="pinned-grid" class="view-grid"></div>
+        </div>
+
+        <!-- Others Section -->
+        <div id="others-section" class="max-w-4xl mx-auto">
+          <h2 id="others-title" class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-1 hidden">Lainnya</h2>
+          <div id="notes-grid" class="view-grid"></div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Fullscreen Focus Modal Editor -->
+  <div id="editor-modal" class="fixed inset-0 z-50 bg-white dark:bg-gray-900 hidden flex flex-col">
+    <!-- Modal Header -->
+    <div class="h-16 border-b border-gray-200 dark:border-gray-800 px-4 sm:px-6 flex items-center justify-between shrink-0">
+      <button id="modal-close-btn" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
+        <i class="fa-solid fa-arrow-left text-lg"></i>
+      </button>
+
+      <div class="flex items-center space-x-2">
+        <button id="modal-pin-btn" class="action-btn p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition" title="Sematkan / Lepas Pin">
+          <i class="fa-solid fa-thumbtack text-lg"></i>
+        </button>
+        <button id="modal-archive-btn" class="action-btn p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition" title="Arsip / Pulihkan">
+          <i class="fa-solid fa-box-archive text-lg"></i>
+        </button>
+        <button id="modal-delete-btn" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-red-500" title="Hapus">
+          <i class="fa-solid fa-trash text-lg"></i>
+        </button>
+        <button id="modal-save-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm transition">
+          Simpan
+        </button>
+      </div>
+    </div>
+
+    <!-- Formatting Toolbar -->
+    <div class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex flex-wrap items-center gap-1 shrink-0">
+      <button type="button" data-command="bold" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Bold"><i class="fa-solid fa-bold"></i></button>
+      <button type="button" data-command="italic" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Italic"><i class="fa-solid fa-italic"></i></button>
+      <button type="button" data-command="underline" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Underline"><i class="fa-solid fa-underline"></i></button>
+      <button type="button" data-command="strikeThrough" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Coret"><i class="fa-solid fa-strikethrough"></i></button>
+      <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
+      <button type="button" data-command="formatBlock" data-value="<h1>" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-bold" title="Heading 1">H1</button>
+      <button type="button" data-command="formatBlock" data-value="<h2>" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-bold" title="Heading 2">H2</button>
+      <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
+      <button type="button" data-command="insertUnorderedList" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Bullet List"><i class="fa-solid fa-list-ul"></i></button>
+      <button type="button" data-command="insertOrderedList" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="flex-1 overflow-y-auto p-4 sm:p-8 max-w-4xl mx-auto w-full custom-scrollbar flex flex-col">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+        <select id="modal-category-select" class="bg-gray-100 dark:bg-gray-800 border-0 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium focus:ring-2 focus:ring-blue-500">
+        </select>
+      </div>
+
+      <input type="text" id="modal-title-input" placeholder="Judul" class="w-full text-2xl sm:text-3xl font-bold bg-transparent border-0 focus:ring-0 px-0 mb-4 text-gray-900 dark:text-white placeholder-gray-400">
+      
+      <div id="modal-timestamps" class="text-xs text-gray-400 mb-4 flex space-x-4">
+        <span id="meta-created">Dibuat: -</span>
+        <span id="meta-updated">Diubah: -</span>
+      </div>
+
+      <div id="editor-content-editable" contenteditable="true" placeholder="Tulis catatan di sini..." class="w-full flex-1 bg-transparent border-0 focus:ring-0 px-0 resize-none text-base sm:text-lg text-gray-700 dark:text-gray-200 focus:outline-none min-h-[250px] outline-none"></div>
+
+      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center space-x-2">
+        <i class="fa-solid fa-tag text-gray-400 text-sm"></i>
+        <input type="text" id="modal-tags-input" placeholder="Tambah tag (pisahkan dengan koma)..." class="w-full text-sm bg-transparent border-0 focus:ring-0 text-gray-600 dark:text-gray-300 placeholder-gray-400">
+      </div>
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="h-14 border-t border-gray-200 dark:border-gray-800 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-white dark:bg-gray-900">
+      <span id="sync-status" class="text-xs text-gray-400 flex items-center space-x-2">
+        <i class="fa-solid fa-cloud"></i>
+        <span>Hadi KeepFlow Hybrid Mode</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- JavaScript Logic -->
+  <script>
+    let notes = [];
+    let currentFilter = 'all';
+    let currentCategory = null;
+    let currentTag = null;
+    let searchQuery = '';
+    let isListView = false;
+    let activeNoteId = null;
+    
+    let datePreset = 'all';
+    let customStartDate = null;
+    let customEndDate = null;
+
+    const LOCAL_KEY = 'hadi_keepflow_offline_notes_v1';
+
+    function updateToolbarState() {
+      document.querySelectorAll('.toolbar-btn').forEach(btn => {
+        const cmd = btn.getAttribute('data-command');
+        const val = btn.getAttribute('data-value');
+        let active = false;
+        try {
+          if (cmd === 'formatBlock') {
+            active = document.queryCommandValue(cmd).toLowerCase() === val.replace(/<|>/g, '').toLowerCase();
+          } else {
+            active = document.queryCommandState(cmd);
+          }
+        } catch (e) {}
+        if (active) btn.classList.add('active');
+        else btn.classList.remove('active');
+      });
+    }
+
+    document.querySelectorAll('.toolbar-btn').forEach(btn => {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        const cmd = this.getAttribute('data-command');
+        const val = this.getAttribute('data-value') || null;
+        document.execCommand(cmd, false, val);
+        document.getElementById('editor-content-editable').focus();
+        updateToolbarState();
+      });
+    });
+
+    const editableArea = document.getElementById('editor-content-editable');
+    if (editableArea) {
+      editableArea.addEventListener('keyup', updateToolbarState);
+      editableArea.addEventListener('mouseup', updateToolbarState);
+      editableArea.addEventListener('focus', updateToolbarState);
+    }
+
+    function formatDate(isoString) {
+      if (!isoString) return '-';
+      const date = new Date(isoString);
+      return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function showLoader(message) {
+      const loader = document.getElementById('global-loader');
+      const text = document.getElementById('loader-text');
+      if (text) text.textContent = message || 'Memproses...';
+      if (loader) loader.classList.remove('opacity-0', 'pointer-events-none');
+    }
+
+    function hideLoader() {
+      const loader = document.getElementById('global-loader');
+      if (loader) loader.classList.add('opacity-0', 'pointer-events-none');
+    }
+
+    function loadInitialData() {
+      showLoader('Memuat data Hadi KeepFlow...');
+      
+      const localData = localStorage.getItem(LOCAL_KEY);
+      if (localData) {
+        try {
+          notes = JSON.parse(localData);
+        } catch(e) { notes = []; }
+      }
+      render();
+      hideLoader();
+
+      if (navigator.onLine && typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(serverData) {
+            if (Array.isArray(serverData) && serverData.length > 0) {
+              notes = serverData;
+              localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
+              render();
+            }
+          })
+          .getNotes();
+      }
+    }
+
+    function syncToBackend() {
+      const statusEl = document.getElementById('sync-status');
+      localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
+
+      if (!navigator.onLine) {
+        if (statusEl) {
+          statusEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-500"></i><span>Offline - Tersimpan di LocalStorage</span>';
+        }
+        return;
+      }
+
+      if (statusEl) {
+        statusEl.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin text-blue-500"></i><span>Menyinkronkan ke Google Drive...</span>';
+      }
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(response) {
+            if (response && response.notes) {
+              notes = response.notes;
+              localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
+              render();
+            }
+            if (statusEl) {
+              statusEl.innerHTML = '<i class="fa-solid fa-cloud text-green-500"></i><span>Tersinkron dengan Google Drive</span>';
+            }
+          })
+          .withFailureHandler(function(error) {
+            if (statusEl) {
+              statusEl.innerHTML = '<i class="fa-solid fa-triangle-exclamation text-amber-500"></i><span>Gagal sinkron cloud (Tersimpan Lokal)</span>';
+            }
+          })
+          .saveNotes(notes);
+      } else {
+        if (statusEl) {
+          statusEl.innerHTML = '<i class="fa-solid fa-database text-blue-500"></i><span>Tersimpan secara lokal</span>';
+        }
+      }
+    }
+
+    const notesGrid = document.getElementById('notes-grid');
+    const pinnedGrid = document.getElementById('pinned-grid');
+    const pinnedSection = document.getElementById('pinned-section');
+    const othersTitle = document.getElementById('others-title');
+    const editorModal = document.getElementById('editor-modal');
+    const tagsList = document.getElementById('tags-list');
+    const categoriesList = document.getElementById('categories-list');
+    const modalCategorySelect = document.getElementById('modal-category-select');
+
+    function matchesDateFilter(noteDateStr) {
+      if (datePreset === 'all') return true;
+      if (!noteDateStr) return false;
+      const noteDate = new Date(noteDateStr);
+      noteDate.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      if (datePreset === 'today') return noteDate.getTime() === today.getTime();
+      if (datePreset === '7days') {
+        const limit = new Date(today);
+        limit.setDate(limit.getDate() - 7);
+        return noteDate >= limit && noteDate <= today;
+      }
+      if (datePreset === '30days') {
+        const limit = new Date(today);
+        limit.setDate(limit.getDate() - 30);
+        return noteDate >= limit && noteDate <= today;
+      }
+      if (datePreset === 'custom') {
+        if (!customStartDate && !customEndDate) return true;
+        const start = customStartDate ? new Date(customStartDate) : new Date(0);
+        start.setHours(0, 0, 0, 0);
+        const end = customEndDate ? new Date(customEndDate) : new Date();
+        end.setHours(23, 59, 59, 999);
+        return noteDate >= start && noteDate <= end;
+      }
+      return true;
+    }
+
+    function getFilteredNotes() {
+      return notes.filter(note => {
+        const query = searchQuery.toLowerCase().trim();
+        const title = (note.title || '').toLowerCase();
+        
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = note.content || '';
+        const plainContent = (tempDiv.textContent || tempDiv.innerText || '').toLowerCase();
+
+        const matchesSearch = !query || title.includes(query) || plainContent.includes(query);
+        if (!matchesSearch) return false;
+
+        if (!matchesDateFilter(note.updatedAt)) return false;
+
+        if (currentFilter === 'pinned') return note.isPinned && !note.isArchived;
+        if (currentFilter === 'archive') return note.isArchived;
+        if (currentCategory) return (note.category || 'Umum') === currentCategory && !note.isArchived;
+        if (currentTag) return note.tags && note.tags.includes(currentTag) && !note.isArchived;
+
+        return !note.isArchived;
+      });
+    }
+
+    function render() {
+      const filtered = getFilteredNotes();
+      notesGrid.className = isListView ? 'view-list' : 'view-grid';
+      pinnedGrid.className = isListView ? 'view-list' : 'view-grid';
+      
+      if (currentFilter === 'pinned') {
+        pinnedSection.classList.add('hidden');
+        othersTitle.classList.add('hidden');
+        notesGrid.innerHTML = filtered.map(createCardHTML).join('');
+      } else {
+        const pinned = filtered.filter(n => n.isPinned && currentFilter !== 'archive');
+        const others = filtered.filter(n => !n.isPinned || currentFilter === 'archive');
+
+        if (pinned.length > 0 && currentFilter === 'all' && !currentCategory) {
+          pinnedSection.classList.remove('hidden');
+          othersTitle.classList.remove('hidden');
+          pinnedGrid.innerHTML = pinned.map(createCardHTML).join('');
+        } else {
+          pinnedSection.classList.add('hidden');
+          othersTitle.classList.add('hidden');
+        }
+        notesGrid.innerHTML = others.map(createCardHTML).join('');
+      }
+
+      renderCategories();
+      renderTags();
+      attachCardListeners();
+    }
+
+    function renderCategories() {
+      const defaultCats = ['Pekerjaan', 'Pribadi', 'Umum'];
+      const activeCats = [...new Set([...defaultCats, ...notes.map(n => n.category || 'Umum')])];
+      
+      categoriesList.innerHTML = activeCats.map(cat => `
+        <div class="category-row group w-full flex items-center justify-between px-3 py-2 rounded-xl text-sm ${currentCategory === cat ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'} cursor-pointer">
+          <div data-category="${escapeHTML(cat)}" class="category-select-btn flex items-center space-x-3 truncate flex-1">
+            <i class="fa-solid fa-folder text-xs"></i>
+            <span class="truncate">${escapeHTML(cat)}</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="text-xs text-gray-400">${notes.filter(n => (n.category || 'Umum') === cat).length}</span>
+            ${cat !== 'Umum' ? `<button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori"><i class="fa-solid fa-pen text-xs"></i></button>` : ''}
+          </div>
+        </div>
+      `).join('');
+
+      modalCategorySelect.innerHTML = activeCats.map(cat => `
+        <option value="${escapeHTML(cat)}">📁 ${escapeHTML(cat)}</option>
+      `).join('');
+
+      document.querySelectorAll('.category-select-btn').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          document.querySelectorAll('.nav-item').forEach(b => {
+            b.classList.remove('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
+            b.classList.add('text-gray-600', 'dark:text-gray-400');
+          });
+          currentCategory = el.dataset.category;
+          currentFilter = 'category';
+          currentTag = null;
+          render();
+        });
+      });
+
+      document.querySelectorAll('.edit-category-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const oldCat = btn.dataset.oldCategory;
+          const newCat = prompt(`Ubah nama kategori "${oldCat}" menjadi:`, oldCat);
+          if (newCat && newCat.trim() && newCat.trim() !== oldCat) {
+            const formattedNewCat = newCat.trim();
+            notes.forEach(n => { if ((n.category || 'Umum') === oldCat) n.category = formattedNewCat; });
+            if (currentCategory === oldCat) currentCategory = formattedNewCat;
+            render();
+            syncToBackend();
+          }
+        });
+      });
+    }
+
+    function renderTags() {
+      const allTags = [...new Set(notes.flatMap(n => n.tags || []))];
+      tagsList.innerHTML = allTags.map(tag => `
+        <button data-tag="${escapeHTML(tag)}" class="tag-item w-full flex items-center space-x-3 px-3 py-2 rounded-xl text-sm ${currentTag === tag ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50'}">
+          <i class="fa-solid fa-tag text-xs"></i>
+          <span class="truncate">${escapeHTML(tag)}</span>
+        </button>
+      `).join('');
+
+      document.querySelectorAll('.tag-item').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.preventDefault();
+          currentTag = btn.dataset.tag;
+          currentCategory = null;
+          currentFilter = 'custom';
+          render();
+        });
+      });
+    }
+
+    function createCardHTML(note) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = note.content || '';
+      const plainContent = tempDiv.textContent || tempDiv.innerText || '';
+
+      if (isListView) {
+        return `
+          <div data-id="${note.id}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow transition cursor-pointer flex items-center justify-between gap-4 group">
+            <div class="flex items-center space-x-3 truncate flex-1">
+              <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px] font-medium shrink-0"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
+              <span class="font-bold text-gray-900 dark:text-white text-sm shrink-0">${escapeHTML(note.title || 'Tanpa Judul')}</span>
+              <span class="text-gray-500 dark:text-gray-400 text-xs truncate">- ${escapeHTML(plainContent)}</span>
+            </div>
+            
+            <div class="flex items-center space-x-3 shrink-0 text-xs text-gray-400">
+              <div class="flex gap-1">
+                ${(note.tags || []).map(t => `<span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded text-[10px]">${escapeHTML(t)}</span>`).join('')}
+              </div>
+              <span>${formatDate(note.updatedAt)}</span>
+              <i class="fa-solid fa-thumbtack text-xs ${note.isPinned ? 'text-blue-500' : 'text-transparent group-hover:text-gray-300'}"></i>
+            </div>
+          </div>
+        `;
+      } else {
+        return `
+          <div data-id="${note.id}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition cursor-pointer flex flex-col justify-between group">
+            <div>
+              <div class="flex items-center justify-between mb-2">
+                <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-medium"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
+                ${note.isArchived ? '<span class="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">Arsip</span>' : ''}
+              </div>
+              ${note.title ? `<h3 class="font-bold text-gray-900 dark:text-white mb-2 text-base">${escapeHTML(note.title)}</h3>` : ''}
+              <p class="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap line-clamp-6 mb-3">${escapeHTML(plainContent)}</p>
+            </div>
+            
+            <div>
+              <div class="text-[11px] text-gray-400 mb-2 flex items-center justify-between">
+                <span><i class="fa-regular fa-clock mr-1"></i>${formatDate(note.updatedAt)}</span>
+              </div>
+              <div class="pt-2 flex items-center justify-between border-t border-gray-100 dark:border-gray-700/50">
+                <div class="flex flex-wrap gap-1">
+                  ${(note.tags || []).map(t => `<span class="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-md text-[10px]">${escapeHTML(t)}</span>`).join('')}
+                </div>
+                <i class="fa-solid fa-thumbtack text-xs ${note.isPinned ? 'text-blue-500' : 'text-gray-300 opacity-0 group-hover:opacity-100'}"></i>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    function escapeHTML(str) {
+      return str ? str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)) : '';
+    }
+
+    function updateModalActionStates(note) {
+      const pinBtn = document.getElementById('modal-pin-btn');
+      const archiveBtn = document.getElementById('modal-archive-btn');
+
+      if (note && note.isPinned) pinBtn.classList.add('active');
+      else pinBtn.classList.remove('active');
+
+      if (note && note.isArchived) archiveBtn.classList.add('active');
+      else archiveBtn.classList.remove('active');
+    }
+
+    function openEditor(noteId = null) {
+      activeNoteId = noteId;
+      const modalTitle = document.getElementById('modal-title-input');
+      const modalContentEditable = document.getElementById('editor-content-editable');
+      const modalTags = document.getElementById('modal-tags-input');
+      const metaCreated = document.getElementById('meta-created');
+      const metaUpdated = document.getElementById('meta-updated');
+
+      let currentNote = null;
+      if (noteId) {
+        currentNote = notes.find(n => n.id === noteId);
+        if (currentNote) {
+          modalTitle.value = currentNote.title || '';
+          modalContentEditable.innerHTML = currentNote.content || '';
+          modalCategorySelect.value = currentNote.category || 'Umum';
+          modalTags.value = (currentNote.tags || []).join(', ');
+          metaCreated.textContent = `Dibuat: ${formatDate(currentNote.createdAt)}`;
+          metaUpdated.textContent = `Diperbarui: ${formatDate(currentNote.updatedAt)}`;
+        }
+      } else {
+        modalTitle.value = '';
+        modalContentEditable.innerHTML = '';
+        modalCategorySelect.value = currentCategory || 'Umum';
+        modalTags.value = '';
+        const nowFormatted = formatDate(new Date().toISOString());
+        metaCreated.textContent = `Dibuat: ${nowFormatted}`;
+        metaUpdated.textContent = `Diperbarui: ${nowFormatted}`;
+      }
+
+      updateModalActionStates(currentNote);
+      editorModal.classList.remove('hidden');
+      modalContentEditable.focus();
+      updateToolbarState();
+    }
+
+    function saveActiveNote() {
+      const title = document.getElementById('modal-title-input').value.trim();
+      const content = document.getElementById('editor-content-editable').innerHTML.trim();
+      const category = modalCategorySelect.value;
+      const tagsRaw = document.getElementById('modal-tags-input').value;
+      const tags = tagsRaw.split(',').map(t => t.trim()).filter(t => t.length > 0);
+
+      if (!title && !content) {
+        editorModal.classList.add('hidden');
+        return;
+      }
+
+      if (activeNoteId) {
+        notes = notes.map(n => n.id === activeNoteId ? {
+          ...n, title, content, category, tags, updatedAt: new Date().toISOString()
+        } : n);
+      } else {
+        notes.unshift({
+          id: 'temp_' + Date.now(),
+          title, content, category,
+          isPinned: false, isArchived: false,
+          tags,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+
+      editorModal.classList.add('hidden');
+      render();
+      syncToBackend();
+    }
+
+    function attachCardListeners() {
+      document.querySelectorAll('.card-item').forEach(card => {
+        card.addEventListener('click', () => openEditor(card.dataset.id));
+      });
+    }
+
+    document.getElementById('export-json-btn').addEventListener('click', () => {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(notes, null, 2));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", `hadi_keepflow_backup_${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    });
+
+    document.getElementById('import-json-file').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        try {
+          const imported = JSON.parse(event.target.result);
+          if (Array.isArray(imported)) {
+            if (confirm(`Impor ${imported.length} catatan ke Hadi KeepFlow? Data saat ini akan digabungkan atau diperbarui.`)) {
+              notes = imported;
+              render();
+              syncToBackend();
+              alert('Berhasil mengimpor data catatan!');
+            }
+          } else {
+            alert('Format file JSON tidak valid.');
+          }
+        } catch(err) {
+          alert('Gagal membaca file JSON.');
+        }
+      };
+      reader.readAsText(file);
+    });
+
+    document.getElementById('toggle-view-mode').addEventListener('click', () => {
+      isListView = !isListView;
+      const viewIcon = document.getElementById('view-mode-icon');
+      viewIcon.className = isListView ? 'fa-solid fa-border-all text-lg' : 'fa-solid fa-list text-lg';
+      render();
+    });
+
+    document.getElementById('date-filter-toggle').addEventListener('click', () => {
+      document.getElementById('date-filter-panel').classList.toggle('hidden');
+    });
+
+    document.getElementById('date-preset-select').addEventListener('change', (e) => {
+      datePreset = e.target.value;
+      const customInputs = document.getElementById('custom-date-inputs');
+      if (datePreset === 'custom') customInputs.classList.remove('hidden');
+      else {
+        customInputs.classList.add('hidden');
+        customStartDate = null; customEndDate = null;
+        render();
+      }
+    });
+
+    document.getElementById('apply-date-range').addEventListener('click', () => {
+      customStartDate = document.getElementById('start-date-input').value;
+      customEndDate = document.getElementById('end-date-input').value;
+      render();
+    });
+
+    document.getElementById('reset-date-filter').addEventListener('click', () => {
+      datePreset = 'all';
+      document.getElementById('date-preset-select').value = 'all';
+      document.getElementById('custom-date-inputs').classList.add('hidden');
+      customStartDate = null; customEndDate = null;
+      render();
+    });
+
+    document.getElementById('add-category-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newCat = prompt('Masukkan nama kategori baru:');
+      if (newCat && newCat.trim()) {
+        currentCategory = newCat.trim();
+        currentFilter = 'category';
+        currentTag = null;
+        render();
+        syncToBackend();
+      }
+    });
+
+    document.getElementById('quick-add-trigger').addEventListener('click', () => openEditor(null));
+    document.getElementById('modal-close-btn').addEventListener('click', () => editorModal.classList.add('hidden'));
+    document.getElementById('modal-save-btn').addEventListener('click', saveActiveNote);
+
+    document.getElementById('modal-pin-btn').addEventListener('click', () => {
+      if (activeNoteId) {
+        notes = notes.map(n => n.id === activeNoteId ? { ...n, isPinned: !n.isPinned } : n);
+        render(); syncToBackend();
+      }
+    });
+
+    document.getElementById('modal-archive-btn').addEventListener('click', () => {
+      if (activeNoteId) {
+        notes = notes.map(n => n.id === activeNoteId ? { ...n, isArchived: !n.isArchived } : n);
+        editorModal.classList.add('hidden');
+        render(); syncToBackend();
+      }
+    });
+
+    document.getElementById('modal-delete-btn').addEventListener('click', () => {
+      if (activeNoteId) {
+        if (confirm('Apakah Anda yakin ingin menghapus catatan ini secara permanen dari perangkat dan Google Drive?')) {
+          // 1. Hapus catatan dari array notes utama
+          notes = notes.filter(n => n.id !== activeNoteId);
+          
+          // 2. Tutup modal editor
+          editorModal.classList.add('hidden');
+          
+          // 3. Reset ID aktif
+          activeNoteId = null;
+          
+          // 4. Render ulang tampilan layar
+          render();
+          
+          // 5. [PENTING] Panggil syncToBackend() agar perubahan data yang sudah dihapus 
+          //    langsung dikirim ke server Apps Script dan diperbarui di Google Drive
+          syncToBackend();
+        }
+      } else {
+        alert('Tidak ada catatan yang sedang aktif untuk dihapus.');
+      }
+    });
+
+    document.getElementById('search-input').addEventListener('input', (e) => {
+      searchQuery = e.target.value;
+      render();
+    });
+
+    document.getElementById('toggle-theme').addEventListener('click', () => {
+      document.documentElement.classList.toggle('dark');
+      const icon = document.getElementById('theme-icon');
+      icon.classList.toggle('fa-moon'); icon.classList.toggle('fa-sun');
+    });
+
+    document.querySelectorAll('.nav-item').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        document.querySelectorAll('.nav-item').forEach(b => {
+          b.classList.remove('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
+          b.classList.add('text-gray-600', 'dark:text-gray-400');
+        });
+        btn.classList.add('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
+        btn.classList.remove('text-gray-600', 'dark:text-gray-400');
+        currentFilter = btn.dataset.filter;
+        currentCategory = null; currentTag = null;
+        render();
+      });
+    });
+
+    document.getElementById('toggle-sidebar').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('hidden');
+    });
+
+    window.addEventListener('online', () => {
+      syncToBackend();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      loadInitialData();
+    });
+  </script>
+</body>
+</html>
