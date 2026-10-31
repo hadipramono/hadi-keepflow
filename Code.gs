@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.2.2
+ * Hadi KeepFlow v1.2.3
  * Google Apps Script backend.
  * Storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md
  *
@@ -110,6 +110,7 @@ function parseNoteFile(file, categoryName) {
     }
   }
 
+  const cloudVersion = file.getLastUpdated().toISOString();
   return {
     id: file.getId(),
     title: fileName.replace(/\.(md|txt)$/i, ''),
@@ -119,7 +120,9 @@ function parseNoteFile(file, categoryName) {
     isArchived: toBoolean(meta.isArchived),
     tags: Array.isArray(meta.tags) ? meta.tags.filter(t => typeof t === 'string') : [],
     createdAt: meta.createdAt || file.getDateCreated().toISOString(),
-    updatedAt: file.getLastUpdated().toISOString()
+    updatedAt: cloudVersion,
+    // Immutable cloud baseline used for optimistic concurrency checks.
+    baseUpdatedAt: cloudVersion
   };
 }
 
@@ -224,9 +227,27 @@ function saveNote(note) {
       try {
         file = DriveApp.getFileById(id);
       } catch (e) {
-        throw new Error('Catatan Drive tidak ditemukan. Operasi dibatalkan.');
+        return {
+          status: 'conflict',
+          reason: 'missing',
+          message: 'Catatan Drive tidak ditemukan atau tidak dapat diakses.',
+          currentNote: null
+        };
       }
-      assertFileBelongsToStorage(file, storage);
+      const currentParent = assertFileBelongsToStorage(file, storage);
+      const currentVersion = file.getLastUpdated().toISOString();
+      const expectedVersion = note.baseUpdatedAt == null ? '' : String(note.baseUpdatedAt);
+
+      // Fail closed: an existing cloud note must carry the exact version it
+      // was loaded from. This also catches legacy queued updates without a base.
+      if (!expectedVersion || expectedVersion !== currentVersion) {
+        return {
+          status: 'conflict',
+          reason: expectedVersion ? 'version_mismatch' : 'version_missing',
+          message: 'Catatan telah berubah di cloud atau versi dasar tidak tersedia.',
+          currentNote: parseNoteFile(file, currentParent.getId() === storage.getId() ? 'Umum' : currentParent.getName())
+        };
+      }
     }
 
     const folder = getOrCreateSubFolder(storage, validated.category);
@@ -253,6 +274,7 @@ function saveNote(note) {
       file = folder.createFile(fileName, fileContent, MimeType.PLAIN_TEXT);
     }
 
+    const savedVersion = file.getLastUpdated().toISOString();
     return {
       status: 'success',
       note: {
@@ -264,7 +286,8 @@ function saveNote(note) {
         isArchived: metadata.isArchived,
         tags: metadata.tags,
         createdAt: metadata.createdAt,
-        updatedAt: now
+        updatedAt: savedVersion,
+        baseUpdatedAt: savedVersion
       }
     };
   } finally {
@@ -272,7 +295,7 @@ function saveNote(note) {
   }
 }
 
-function deleteNote(fileId) {
+function deleteNote(fileId, expectedUpdatedAt) {
   const id = String(fileId || '').trim();
   if (!id || id.startsWith('temp_') || id.startsWith('import_')) {
     return { status: 'success', deleted: false, message: 'Catatan lokal tidak memiliki file Drive.' };
@@ -287,10 +310,21 @@ function deleteNote(fileId) {
     try {
       file = DriveApp.getFileById(id);
     } catch (e) {
-      throw new Error('Catatan Drive tidak ditemukan. Operasi penghapusan dibatalkan.');
+      // The requested final state (file absent) is already satisfied.
+      return { status: 'success', deleted: false, alreadyMissing: true, id: id };
     }
 
-    assertFileBelongsToStorage(file, storage);
+    const parent = assertFileBelongsToStorage(file, storage);
+    const currentVersion = file.getLastUpdated().toISOString();
+    const expectedVersion = expectedUpdatedAt == null ? '' : String(expectedUpdatedAt);
+    if (!expectedVersion || expectedVersion !== currentVersion) {
+      return {
+        status: 'conflict',
+        reason: expectedVersion ? 'version_mismatch' : 'version_missing',
+        message: 'Catatan telah berubah di cloud atau versi dasar tidak tersedia.',
+        currentNote: parseNoteFile(file, parent.getId() === storage.getId() ? 'Umum' : parent.getName())
+      };
+    }
     file.setTrashed(true);
     return { status: 'success', deleted: true, id: id };
   } finally {
@@ -302,7 +336,13 @@ function deleteNote(fileId) {
 // This function intentionally does not delete files omitted from the payload.
 function saveNotes(notes) {
   if (!Array.isArray(notes)) throw new Error('Daftar catatan tidak valid.');
-  const saved = notes.map(note => saveNote(note).note);
+  const saved = notes.map(note => {
+    const result = saveNote(note);
+    if (!result || result.status !== 'success') {
+      throw new Error('Penyimpanan batch dihentikan karena konflik versi. Gunakan saveNote untuk menyelesaikan konflik satu per satu.');
+    }
+    return result.note;
+  });
   return { status: 'success', notes: saved };
 }
 

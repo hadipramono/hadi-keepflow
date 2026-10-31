@@ -431,8 +431,10 @@
               type: op.type,
               id,
               queuedAt: op.queuedAt || new Date().toISOString(),
-              attempts: Number(op.attempts) || 0
+              attempts: Number(op.attempts) || 0,
+              expectedUpdatedAt: op.expectedUpdatedAt || ''
             };
+            if (op.conflict) normalized.conflict = op.conflict;
             if (op.type === 'save') {
               if (!op.note || typeof op.note !== 'object') return null;
               normalized.note = { ...op.note, id };
@@ -472,7 +474,9 @@
     }
 
     function enqueueOperation(type, noteOrId) {
-      const id = type === 'delete' ? String(noteOrId) : String(noteOrId.id);
+      const id = type === 'delete'
+        ? String(typeof noteOrId === 'object' ? noteOrId.id : noteOrId)
+        : String(noteOrId.id);
       if (!id) return;
 
       const operation = type === 'delete'
@@ -481,7 +485,8 @@
             type: 'delete',
             id,
             queuedAt: new Date().toISOString(),
-            attempts: 0
+            attempts: 0,
+            expectedUpdatedAt: typeof noteOrId === 'object' ? (noteOrId.baseUpdatedAt || '') : ''
           }
         : {
             opId: createOperationId(),
@@ -507,23 +512,97 @@
       const oldKey = String(oldId);
       const newKey = String(savedNote.id);
 
-      // Change identity only. Do not replace current local fields with an older
-      // server response, because the user may have edited the note meanwhile.
+      // Advance the cloud baseline and replace temporary identity when needed.
+      // Preserve current local fields because the user may have edited meanwhile.
       notes = notes.map(note =>
-        String(note.id) === oldKey ? { ...note, id: newKey } : note
+        String(note.id) === oldKey
+          ? { ...note, id: newKey, baseUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt }
+          : note
       );
 
       lastObservedNotes = lastObservedNotes.map(note =>
-        String(note.id) === oldKey ? { ...note, id: newKey } : note
+        String(note.id) === oldKey
+          ? { ...note, id: newKey, baseUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt }
+          : note
       );
 
-      // Update IDs on queued (not in-flight) operations, preserving each
-      // operation's own payload snapshot. Never mutate the acknowledged request.
+      // Advance the baseline for later queued operations on the same note.
+      // Preserve each operation's content snapshot; update only its identity/version.
       pendingOperations = pendingOperations.map(op => {
         if (op.opId === acknowledgedOperationId || String(op.id) !== oldKey) return op;
-        if (op.type === 'delete') return { ...op, id: newKey };
-        return { ...op, id: newKey, note: { ...op.note, id: newKey } };
+        if (op.type === 'delete') {
+          return { ...op, id: newKey, expectedUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt };
+        }
+        return {
+          ...op,
+          id: newKey,
+          note: { ...op.note, id: newKey, baseUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt }
+        };
       });
+
+      persistLocal();
+      render();
+    }
+
+    function resolveSyncConflict(operation, response) {
+      const currentNote = response.currentNote || null;
+      const id = String(operation.id);
+      const message = currentNote
+        ? 'Versi catatan di Google Drive berbeda dari versi lokal.\n\n' +
+          'OK: pertahankan versi lokal dan timpa versi cloud (keputusan manual).\n' +
+          'Cancel: buang perubahan lokal tertunda dan gunakan versi cloud.'
+        : operation.type === 'save'
+          ? 'Catatan yang menjadi dasar perubahan sudah tidak ada atau tidak dapat diakses di Google Drive.\n\n' +
+            'OK: simpan salinan lokal sebagai catatan baru.\n' +
+            'Cancel: buang perubahan lokal tertunda.'
+          : 'Catatan sudah tidak ditemukan di Google Drive. Penghapusan dianggap selesai.';
+      const keepLocal = confirm(message);
+
+      if (keepLocal) {
+        if (currentNote) {
+          pendingOperations = pendingOperations.map(op => {
+            if (String(op.id) !== id) return op;
+            const next = { ...op, conflict: null, attempts: 0 };
+            if (next.type === 'save') {
+              next.note = { ...next.note, baseUpdatedAt: currentNote.baseUpdatedAt };
+            } else {
+              next.expectedUpdatedAt = currentNote.baseUpdatedAt;
+            }
+            return next;
+          });
+          notes = notes.map(note => String(note.id) === id
+            ? { ...note, baseUpdatedAt: currentNote.baseUpdatedAt }
+            : note);
+          lastObservedNotes = lastObservedNotes.map(note => String(note.id) === id
+            ? { ...note, baseUpdatedAt: currentNote.baseUpdatedAt }
+            : note);
+        } else {
+          // The cloud copy disappeared. Recreate a local save under a new ID;
+          // a pending delete is already satisfied by the missing cloud file.
+          const localNote = notes.find(note => String(note.id) === id);
+          pendingOperations = pendingOperations.filter(op => String(op.id) !== id);
+          if (operation.type === 'save' && localNote) {
+            const newId = 'temp_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+            const recreated = { ...localNote, id: newId, baseUpdatedAt: undefined };
+            notes = notes.map(note => String(note.id) === id ? recreated : note);
+            lastObservedNotes = lastObservedNotes.filter(note => String(note.id) !== id);
+            enqueueOperation('save', recreated);
+          }
+        }
+        setSyncStatus('Konflik: versi lokal dipilih secara manual', 'fa-triangle-exclamation', 'text-amber-500');
+      } else {
+        pendingOperations = pendingOperations.filter(op => String(op.id) !== id);
+        if (currentNote) {
+          notes = notes.map(note => String(note.id) === id ? currentNote : note);
+          if (!notes.some(note => String(note.id) === id)) notes.push(currentNote);
+          lastObservedNotes = lastObservedNotes.map(note => String(note.id) === id ? currentNote : note);
+          if (!lastObservedNotes.some(note => String(note.id) === id)) lastObservedNotes.push(currentNote);
+        } else {
+          notes = notes.filter(note => String(note.id) !== id);
+          lastObservedNotes = lastObservedNotes.filter(note => String(note.id) !== id);
+        }
+        setSyncStatus('Konflik diselesaikan: menggunakan versi cloud', 'fa-cloud', 'text-green-600');
+      }
 
       persistLocal();
       render();
@@ -567,6 +646,14 @@
 
       const runner = google.script.run
         .withSuccessHandler(response => {
+          if (response && response.status === 'conflict') {
+            syncRunning = false;
+            inFlightOperationId = null;
+            resolveSyncConflict(operation, response);
+            flushPendingOperations();
+            return;
+          }
+
           const validSaveResponse = operation.type !== 'save' ||
             (response && response.note && response.note.id);
           if (!response || response.status !== 'success' || !validSaveResponse) {
@@ -620,7 +707,7 @@
           }
         });
 
-      if (operation.type === 'delete') runner.deleteNote(operation.id);
+      if (operation.type === 'delete') runner.deleteNote(operation.id, operation.expectedUpdatedAt);
       else runner.saveNote(operation.note);
     }
 
@@ -744,7 +831,7 @@
       });
 
       lastObservedNotes.forEach(old => {
-        if (!currentMap.has(String(old.id))) enqueueOperation('delete', old.id);
+        if (!currentMap.has(String(old.id))) enqueueOperation('delete', old);
       });
 
       lastObservedNotes = current;

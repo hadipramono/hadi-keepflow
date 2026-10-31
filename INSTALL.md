@@ -1,4 +1,4 @@
-# Instalasi Hadi KeepFlow v1.2.2 — Tahap 1.3
+# Instalasi Hadi KeepFlow v1.2.3 — Tahap 1.4
 
 ## 1. Backup terlebih dahulu
 
@@ -13,9 +13,9 @@
 3. Ganti seluruh isinya dengan `Code.gs` dari paket ini.
 4. Simpan project.
 
-## 3. Frontend
+## 3. Perbarui frontend
 
-`Index.html` dalam paket ini sama dengan v1.2.1. Tidak perlu mengganti file HTML jika frontend v1.2.1 sudah terpasang.
+Ganti seluruh isi file HTML `Index` dengan versi dalam paket ini. Frontend perlu diperbarui agar dapat menangani respons konflik dari backend.
 
 ## 4. Deploy versi baru
 
@@ -24,7 +24,7 @@
 3. Pada bagian Version, pilih **New version**.
 4. Pertahankan pengaturan Execute as dan Who has access sesuai kebutuhan aplikasi.
 5. Klik Deploy.
-6. Buka URL Web App dan jalankan `BACKEND-SECURITY-TEST.md`, `SYNC-QUEUE-TEST.md`, serta `OFFLINE-RECONCILIATION-TEST.md`.
+6. Buka URL Web App dan jalankan `BACKEND-SECURITY-TEST.md`, `SYNC-QUEUE-TEST.md`, `OFFLINE-RECONCILIATION-TEST.md`, serta `CONFLICT-VERSION-TEST.md`.
 
 ## 5. Catatan penting
 
@@ -34,6 +34,10 @@
 - ID file yang tidak ditemukan tidak lagi diperlakukan sebagai catatan baru.
 - Jangan menghapus LocalStorage atau queue yang masih berisi operasi tertunda.
 
-## 6. Rollback
+## 6. Perhatian untuk antrean lama
 
-Jika ditemukan masalah, pulihkan `Code.gs` dari backup dan deploy sebagai New version. Jangan menghapus atau memindahkan file Drive untuk melakukan rollback.
+Operasi save/delete yang tersimpan dari versi sebelumnya mungkin belum memiliki token versi. Saat dikirim setelah upgrade, operasi tersebut akan memicu dialog konflik. Pilih dengan sengaja apakah akan menggunakan versi cloud atau mempertahankan perubahan lokal. Jangan menghapus LocalStorage untuk menghilangkan dialog tersebut.
+
+## 7. Rollback
+
+Jika ditemukan masalah, pulihkan `Code.gs` dan `Index.html` dari backup, lalu deploy sebagai New version. Jangan menghapus atau memindahkan file Drive untuk melakukan rollback.
