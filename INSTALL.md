@@ -25,3 +25,11 @@ If upgrading from v1.2.8.1, replace only these two files:
 - `AppScripts.html`
 
 Save and deploy as a **New version**. Do not clear LocalStorage. Existing note data and sync queue keys are preserved. Run `CATEGORY-PERSISTENCE-TEST.md`.
+
+
+## v1.2.8.3 — Category Management
+If upgrading from v1.2.8.2, replace only:
+- `NotesApi.gs`
+- `AppScripts.html`
+
+Save the project and deploy as a **New version**. Do not clear LocalStorage. `Umum` is the only built-in category. Existing `Pekerjaan`, `Pribadi`, and other category folders are not deleted automatically; they remain available if present in Drive or used by notes. A non-default category can be deleted only when its Drive folder contains no files and no subfolders. The folder is moved to Google Drive Trash, not permanently deleted. Run `CATEGORY-MANAGEMENT-TEST.md` after deployment.

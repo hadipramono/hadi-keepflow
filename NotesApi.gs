@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.2.8 backend module.
+ * Hadi KeepFlow v1.2.8.3 backend module.
  * Apps Script .gs files share one global namespace.
  */
 
@@ -29,7 +29,7 @@ function getNotes() {
  */
 function getCategories() {
   const storage = getStorageFolder();
-  const names = new Set(['Pekerjaan', 'Pribadi', 'Umum']);
+  const names = new Set(['Umum']);
   const folders = storage.getFolders();
   while (folders.hasNext()) {
     const folder = folders.next();
@@ -49,6 +49,9 @@ function createCategoryFolder(categoryName) {
     return { status: 'error', message: 'Nama kategori tidak boleh kosong.' };
   }
   const category = safeName(rawCategory, '');
+  if (category.toLocaleLowerCase() === 'umum') {
+    return { status: 'error', message: 'Umum adalah kategori default dan tidak perlu dibuat.' };
+  }
   if (!category || category.length > 120) {
     return { status: 'error', message: 'Nama kategori tidak valid (maksimal 120 karakter).' };
   }
@@ -59,6 +62,42 @@ function createCategoryFolder(categoryName) {
     const storage = getStorageFolder();
     const folder = getOrCreateSubFolder(storage, category);
     return { status: 'success', category: folder.getName(), categories: getCategories() };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+
+/** Delete a category folder only when it is truly empty. */
+function deleteCategoryFolder(categoryName) {
+  const rawCategory = String(categoryName == null ? '' : categoryName).trim();
+  if (!rawCategory) {
+    return { status: 'error', message: 'Nama kategori tidak boleh kosong.' };
+  }
+  const category = safeName(rawCategory, '');
+  if (!category || category.length > 120) {
+    return { status: 'error', message: 'Nama kategori tidak valid.' };
+  }
+  if (category.toLocaleLowerCase() === 'umum') {
+    return { status: 'error', message: 'Kategori Umum tidak dapat dihapus.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const storage = getStorageFolder();
+    const folder = getUniqueFolderByName(storage, category);
+    if (!folder || folder.isTrashed()) {
+      return { status: 'error', message: 'Kategori tidak ditemukan.' };
+    }
+
+    // Check actual Drive contents, including archived notes and nested folders.
+    if (folder.getFiles().hasNext() || folder.getFolders().hasNext()) {
+      return { status: 'error', message: 'Kategori masih memiliki isi dan tidak dapat dihapus.' };
+    }
+
+    folder.setTrashed(true);
+    return { status: 'success', category: category, categories: getCategories() };
   } finally {
     lock.releaseLock();
   }
@@ -257,8 +296,11 @@ function renameCategoryFolder(oldName, newName) {
   if (!oldCategory || !newCategory || oldCategory.length > 120 || newCategory.length > 120) {
     return { status: 'error', message: 'Nama kategori tidak valid.' };
   }
-  if (oldCategory === 'Umum') {
+  if (oldCategory.toLocaleLowerCase() === 'umum') {
     return { status: 'error', message: 'Kategori Umum tidak dapat diubah namanya.' };
+  }
+  if (newCategory.toLocaleLowerCase() === 'umum') {
+    return { status: 'error', message: 'Nama Umum dicadangkan sebagai kategori default.' };
   }
 
   const lock = LockService.getScriptLock();

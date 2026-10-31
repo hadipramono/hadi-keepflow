@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.2.8 — Tahap 2.4: Maintainability & Code Structure
+    // Hadi KeepFlow v1.2.8.3 — Category Management
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -23,7 +23,7 @@
 
     const LOCAL_KEY = 'hadi_keepflow_offline_notes_v1';
     const CATEGORY_STATE_KEY = 'hadi_keepflow_categories_v1';
-    const DEFAULT_CATEGORIES = ['Umum', 'Pekerjaan', 'Pribadi'];
+    const DEFAULT_CATEGORIES = ['Umum'];
     let categories = [...DEFAULT_CATEGORIES];
     let pendingCategoryCreates = [];
 
@@ -36,6 +36,15 @@
         categories = [...DEFAULT_CATEGORIES];
         pendingCategoryCreates = [];
       }
+    }
+
+    function pruneLegacyDefaultCategoriesFromLocalState() {
+      const legacyDefaults = new Set(['Pekerjaan', 'Pribadi']);
+      const noteCategories = new Set(notes.map(note => String(note.category || 'Umum').trim()));
+      categories = categories.filter(category =>
+        !legacyDefaults.has(category) || noteCategories.has(category) || pendingCategoryCreates.includes(category)
+      );
+      persistCategoryState();
     }
 
     function persistCategoryState() {
@@ -53,6 +62,19 @@
       renderCategories();
     }
 
+    function reconcileCloudCategories(names) {
+      if (!Array.isArray(names)) return;
+      const noteCategories = notes.map(note => String(note.category || 'Umum').trim()).filter(Boolean);
+      categories = [...new Set([
+        ...DEFAULT_CATEGORIES,
+        ...names.map(name => String(name).trim()).filter(Boolean),
+        ...noteCategories,
+        ...pendingCategoryCreates
+      ])];
+      persistCategoryState();
+      renderCategories();
+    }
+
     function syncPendingCategoryCreates() {
       if (!pendingCategoryCreates.length || !navigator.onLine ||
           typeof google === 'undefined' || !google.script || !google.script.run) return;
@@ -64,7 +86,7 @@
             return;
           }
           pendingCategoryCreates = pendingCategoryCreates.filter(name => name !== category);
-          mergeCategories(response.categories || [response.category]);
+          reconcileCloudCategories(response.categories || [response.category]);
           persistCategoryState();
           if (pendingCategoryCreates.length) syncPendingCategoryCreates();
         })
@@ -79,7 +101,7 @@
       if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) return;
       google.script.run
         .withSuccessHandler(names => {
-          mergeCategories(names);
+          reconcileCloudCategories(names);
           syncPendingCategoryCreates();
         })
         .withFailureHandler(error => {
@@ -92,6 +114,13 @@
     function addCategory(categoryName) {
       const name = String(categoryName || '').replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
       if (!name) return;
+      if (name.toLocaleLowerCase() === 'umum') {
+        currentCategory = 'Umum';
+        currentFilter = 'category';
+        currentTag = null;
+        render();
+        return;
+      }
       const existing = categories.find(item => item.toLowerCase() === name.toLowerCase());
       const finalName = existing || name;
       mergeCategories([finalName]);
@@ -587,6 +616,7 @@
       } catch (e) {
         notes = [];
       }
+      pruneLegacyDefaultCategoriesFromLocalState();
 
       // Capture local state before the request. Any edits/deletes made while
       // the request is pending are recorded in the durable queue by
@@ -784,6 +814,49 @@
     pinnedGrid.addEventListener('click', handleCardClick);
 
     categoriesList.addEventListener('click', (event) => {
+      const deleteButton = event.target.closest('.delete-category-btn');
+      if (deleteButton) {
+        event.preventDefault();
+        event.stopPropagation();
+        const category = deleteButton.dataset.category;
+        if (!category || category.toLocaleLowerCase() === 'umum') return;
+        const count = notes.filter(note => (note.category || 'Umum') === category).length;
+        if (count > 0) {
+          alert(`Kategori "${category}" masih memiliki ${count} catatan. Hapus atau pindahkan catatan terlebih dahulu.`);
+          return;
+        }
+        if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) {
+          alert('Penghapusan kategori memerlukan koneksi internet. Silakan coba kembali saat online.');
+          return;
+        }
+        if (!confirm(`Hapus kategori kosong "${category}"? Tindakan ini memindahkan folder kategori ke Sampah Google Drive.`)) return;
+        deleteButton.disabled = true;
+        google.script.run
+          .withSuccessHandler(response => {
+            if (!response || response.status !== 'success') {
+              alert((response && response.message) || 'Kategori gagal dihapus.');
+              renderCategories();
+              return;
+            }
+            categories = categories.filter(item => item !== category);
+            pendingCategoryCreates = pendingCategoryCreates.filter(item => item !== category);
+            if (currentCategory === category) {
+              currentCategory = 'Umum';
+              currentFilter = 'category';
+            }
+            persistCategoryState();
+            reconcileCloudCategories(response.categories || ['Umum']);
+            render();
+          })
+          .withFailureHandler(error => {
+            console.error('KeepFlow delete category error:', error);
+            alert('Kategori gagal dihapus. Periksa koneksi lalu coba kembali.');
+            renderCategories();
+          })
+          .deleteCategoryFolder(category);
+        return;
+      }
+
       const editButton = event.target.closest('.edit-category-btn');
       if (editButton) {
         event.preventDefault();
@@ -944,9 +1017,7 @@
       notes.forEach(note => {
         const category = note.category || 'Umum';
         activeCatsSet.add(category);
-        if (!isArchivedNote(note)) {
-          categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
-        }
+        categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
       });
       const activeCats = [...activeCatsSet];
 
@@ -958,7 +1029,7 @@
           </div>
           <div class="flex items-center space-x-2">
             <span class="text-xs text-gray-400">${categoryCounts.get(cat) || 0}</span>
-            ${cat !== 'Umum' ? `<button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori"><i class="fa-solid fa-pen text-xs"></i></button>` : ''}
+            ${cat !== 'Umum' ? `<button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori"><i class="fa-solid fa-pen text-xs"></i></button>${(categoryCounts.get(cat) || 0) === 0 ? `<button data-category="${escapeHTML(cat)}" class="delete-category-btn text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1" title="Hapus Kategori Kosong"><i class="fa-solid fa-trash text-xs"></i></button>` : `<span class="text-gray-300 p-1" title="Kategori masih memiliki catatan"><i class="fa-solid fa-lock text-xs"></i></span>`}` : ''}
           </div>
         </div>
       `).join('');

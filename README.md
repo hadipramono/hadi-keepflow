@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.2.8.2 — Category Persistence Fix**
+**v1.2.8.3 — Category Management**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -29,4 +29,13 @@ Fixes a documentation-comment boundary in `DriveStorage.gs` that hid the storage
 
 
 ## Hotfix v1.2.8.2
-Fixes newly created categories not appearing in the sidebar/editor category list and not surviving reload. Adds a Drive category-folder API and a local pending category queue. See `CATEGORY-PERSISTENCE-TEST.md`.
+Fixes newly created categories not appearing in the sidebar/editor category list and not surviving reload. Adds a Drive category-folder API and a local pending category queue. See `CATEGORY-PERSISTENCE-TEST.md` and `CATEGORY-MANAGEMENT-TEST.md`.
+
+
+## v1.2.8.3 — Category Management
+- Only `Umum` is a built-in default category.
+- `Pekerjaan` and `Pribadi` are no longer injected as defaults; existing Drive folders and categories used by notes remain visible.
+- Empty non-default category folders can be moved to Google Drive Trash from the sidebar.
+- Categories containing any Drive file or nested folder are protected by a server-side check.
+- Archived notes are included in the UI count and prevent deletion.
+- Cloud category reconciliation removes stale local-only default entries while retaining categories used by notes and pending category creation.

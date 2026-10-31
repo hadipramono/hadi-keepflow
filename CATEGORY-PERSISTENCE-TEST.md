@@ -28,3 +28,4 @@
 - Existing pending note operations remain in `hadi_keepflow_pending_v1`.
 - No LocalStorage keys are manually cleared.
 - Category names containing `/`, `\`, `?`, `%`, `*`, `:`, `|`, `"`, `<`, or `>` are normalized consistently.
+
