@@ -391,21 +391,75 @@
     const QUEUE_KEY = 'hadi_keepflow_pending_v1';
     let pendingOperations = [];
     let syncRunning = false;
+    let inFlightOperationId = null;
     let serverReady = false;
-    let lastServerIds = new Set();
+    // Snapshot of the last UI state observed by syncToBackend().
+    // This is deliberately separate from the last server response.
+    let lastObservedNotes = [];
+
+    function cloneData(value) {
+      return JSON.parse(JSON.stringify(value));
+    }
+
+    function createOperationId() {
+      if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+        return window.crypto.randomUUID();
+      }
+      return 'op_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    }
 
     function readQueue() {
       try {
         const value = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
-        pendingOperations = Array.isArray(value) ? value : [];
+        if (!Array.isArray(value)) {
+          pendingOperations = [];
+          return;
+        }
+
+        // Migrate the v1 queue format without discarding valid pending work.
+        pendingOperations = value
+          .filter(op => op && (op.type === 'save' || op.type === 'delete'))
+          .map(op => {
+            const id = String(op.id || (op.note && op.note.id) || '');
+            if (!id) return null;
+            const normalized = {
+              opId: op.opId || createOperationId(),
+              type: op.type,
+              id,
+              queuedAt: op.queuedAt || new Date().toISOString(),
+              attempts: Number(op.attempts) || 0
+            };
+            if (op.type === 'save') {
+              if (!op.note || typeof op.note !== 'object') return null;
+              normalized.note = { ...op.note, id };
+            }
+            return normalized;
+          })
+          .filter(Boolean);
       } catch (e) {
+        console.error('KeepFlow queue read error:', e);
         pendingOperations = [];
       }
     }
 
     function persistLocal() {
-      localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
-      localStorage.setItem(QUEUE_KEY, JSON.stringify(pendingOperations));
+      let queueSaved = false;
+      try {
+        // Persist the queue first: it is the recovery log for cloud operations.
+        localStorage.setItem(QUEUE_KEY, JSON.stringify(pendingOperations));
+        queueSaved = true;
+      } catch (e) {
+        console.error('KeepFlow queue persistence error:', e);
+        setSyncStatus('Gagal menyimpan antrean lokal', 'fa-triangle-exclamation', 'text-red-500');
+      }
+
+      try {
+        localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
+      } catch (e) {
+        console.error('KeepFlow local data persistence error:', e);
+        setSyncStatus('Data terlalu besar untuk disimpan lokal', 'fa-triangle-exclamation', 'text-red-500');
+      }
+      return queueSaved;
     }
 
     function setSyncStatus(message, icon = 'fa-cloud', color = 'text-gray-400') {
@@ -415,32 +469,79 @@
 
     function enqueueOperation(type, noteOrId) {
       const id = type === 'delete' ? String(noteOrId) : String(noteOrId.id);
-      // Coalesce pending operations for the same note; the latest action wins.
-      const protectedHead = syncRunning ? pendingOperations.slice(0, 1) : [];
-      const remaining = syncRunning ? pendingOperations.slice(1) : pendingOperations;
-      pendingOperations = protectedHead.concat(remaining.filter(op => String(op.id) !== id));
-      pendingOperations.push(type === 'delete'
-        ? { type, id, queuedAt: new Date().toISOString() }
-        : { type: 'save', id, note: { ...noteOrId }, queuedAt: new Date().toISOString() });
-      persistLocal();
-      flushPendingOperations();
+      if (!id) return;
+
+      const operation = type === 'delete'
+        ? {
+            opId: createOperationId(),
+            type: 'delete',
+            id,
+            queuedAt: new Date().toISOString(),
+            attempts: 0
+          }
+        : {
+            opId: createOperationId(),
+            type: 'save',
+            id,
+            // Snapshot is immutable after enqueue; later edits create a new operation.
+            note: cloneData({ ...noteOrId, id }),
+            queuedAt: new Date().toISOString(),
+            attempts: 0
+          };
+
+      // Keep the in-flight head untouched. Coalesce only operations that have
+      // not been sent yet, so the latest pending action for this note wins.
+      pendingOperations = pendingOperations.filter(op =>
+        op.opId === inFlightOperationId || String(op.id) !== id
+      );
+      pendingOperations.push(operation);
+
+      if (persistLocal()) flushPendingOperations();
     }
 
-    function replaceTemporaryId(oldId, savedNote) {
-      notes = notes.map(n => String(n.id) === String(oldId) ? { ...n, id: savedNote.id } : n);
+    function replaceTemporaryId(oldId, savedNote, acknowledgedOperationId) {
+      const oldKey = String(oldId);
+      const newKey = String(savedNote.id);
+
+      // Change identity only. Do not replace current local fields with an older
+      // server response, because the user may have edited the note meanwhile.
+      notes = notes.map(note =>
+        String(note.id) === oldKey ? { ...note, id: newKey } : note
+      );
+
+      lastObservedNotes = lastObservedNotes.map(note =>
+        String(note.id) === oldKey ? { ...note, id: newKey } : note
+      );
+
+      // Update IDs on queued (not in-flight) operations, preserving each
+      // operation's own payload snapshot. Never mutate the acknowledged request.
       pendingOperations = pendingOperations.map(op => {
-        if (String(op.id) !== String(oldId)) return op;
-        if (op.type === 'delete') return { ...op, id: savedNote.id };
-        return { ...op, id: savedNote.id, note: { ...savedNote } };
+        if (op.opId === acknowledgedOperationId || String(op.id) !== oldKey) return op;
+        if (op.type === 'delete') return { ...op, id: newKey };
+        return { ...op, id: newKey, note: { ...op.note, id: newKey } };
       });
+
       persistLocal();
       render();
     }
 
     function flushPendingOperations() {
-      if (syncRunning || !navigator.onLine ||
-          typeof google === 'undefined' || !google.script || !google.script.run) {
-        if (!navigator.onLine) setSyncStatus('Offline - perubahan masuk antrean', 'fa-triangle-exclamation', 'text-amber-500');
+      if (syncRunning) return;
+
+      if (!navigator.onLine) {
+        setSyncStatus('Offline - perubahan masuk antrean', 'fa-triangle-exclamation', 'text-amber-500');
+        return;
+      }
+
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        setSyncStatus('Mode lokal - Google Apps Script tidak tersedia', 'fa-database', 'text-blue-500');
+        return;
+      }
+
+      // Wait until the initial cloud snapshot has completed. Operations may be
+      // queued before this point, but must not race the initial reconciliation.
+      if (!serverReady) {
+        setSyncStatus('Antrean tersimpan - menunggu data cloud', 'fa-database', 'text-blue-500');
         return;
       }
 
@@ -449,35 +550,50 @@
         return;
       }
 
+      const queuedHead = pendingOperations[0];
+      const operation = cloneData(queuedHead);
       syncRunning = true;
-      const operation = pendingOperations[0];
+      inFlightOperationId = operation.opId;
       setSyncStatus('Menyinkronkan perubahan...', 'fa-circle-notch fa-spin', 'text-blue-500');
 
       const runner = google.script.run
         .withSuccessHandler(response => {
-          if (!response || response.status !== 'success') {
+          const validSaveResponse = operation.type !== 'save' ||
+            (response && response.note && response.note.id);
+          if (!response || response.status !== 'success' || !validSaveResponse) {
             syncRunning = false;
+            inFlightOperationId = null;
+            const failed = pendingOperations.find(op => op.opId === operation.opId);
+            if (failed) failed.attempts = (Number(failed.attempts) || 0) + 1;
+            persistLocal();
             setSyncStatus('Sinkronisasi gagal - perubahan tetap antre', 'fa-triangle-exclamation', 'text-amber-500');
             return;
           }
 
-          if (operation.type === 'save' && response.note) {
-            const oldId = operation.id;
-            replaceTemporaryId(oldId, response.note);
+          if (operation.type === 'save' && response.note && response.note.id) {
+            replaceTemporaryId(operation.id, response.note, operation.opId);
           } else if (operation.type === 'delete') {
-            notes = notes.filter(n => String(n.id) !== String(operation.id));
+            // The local delete already happened. Keep this defensive cleanup
+            // for operations restored from an older queue.
+            notes = notes.filter(note => String(note.id) !== String(operation.id));
+            lastObservedNotes = lastObservedNotes.filter(note => String(note.id) !== String(operation.id));
           }
 
-          // Remove only the operation that was acknowledged by the server.
-          pendingOperations.shift();
-          window.__keepFlowLastNotes = notes.map(n => ({ ...n }));
+          // Acknowledge by operation ID, never by blindly shifting the queue.
+          pendingOperations = pendingOperations.filter(op => op.opId !== operation.opId);
           persistLocal();
+
           syncRunning = false;
+          inFlightOperationId = null;
           render();
           flushPendingOperations();
         })
         .withFailureHandler(error => {
           syncRunning = false;
+          inFlightOperationId = null;
+          const failed = pendingOperations.find(op => op.opId === operation.opId);
+          if (failed) failed.attempts = (Number(failed.attempts) || 0) + 1;
+          persistLocal();
           setSyncStatus('Gagal sinkron - tersimpan lokal, coba lagi saat online', 'fa-triangle-exclamation', 'text-amber-500');
           console.error('KeepFlow sync error:', error);
         });
@@ -497,6 +613,9 @@
         notes = [];
       }
 
+      // Capture the initial local state. Changes made before getNotes() returns
+      // are diffed against this snapshot and enter the durable queue.
+      lastObservedNotes = cloneData(notes);
       render();
       hideLoader();
 
@@ -513,17 +632,22 @@
           }
 
           serverReady = true;
-          lastServerIds = new Set(serverData.map(n => String(n.id)));
-          window.__keepFlowLastNotes = serverData.map(n => ({ ...n }));
-          // Server is the baseline. Preserve local-only items only when they are
-          // represented by a queued save; queued deletes must stay deleted.
+          // Server is the baseline. Preserve local records that have pending
+          // saves, and honor queued deletes during reconciliation.
           const queuedIds = new Set(pendingOperations.map(op => String(op.id)));
-          const localPending = notes.filter(n => queuedIds.has(String(n.id)));
-          const merged = new Map(serverData.map(n => [String(n.id), n]));
-          localPending.forEach(n => merged.set(String(n.id), n));
-          notes = [...merged.values()].filter(n =>
-            !pendingOperations.some(op => op.type === 'delete' && String(op.id) === String(n.id))
+          const localPending = notes.filter(note => queuedIds.has(String(note.id)));
+          const merged = new Map(serverData.map(note => [String(note.id), note]));
+          localPending.forEach(note => merged.set(String(note.id), note));
+
+          notes = [...merged.values()].filter(note =>
+            !pendingOperations.some(op =>
+              op.type === 'delete' && String(op.id) === String(note.id)
+            )
           );
+
+          // The merged state becomes the next comparison point. Pending work
+          // remains represented by the queue and is sent after this point.
+          lastObservedNotes = cloneData(notes);
           persistLocal();
           render();
           flushPendingOperations();
@@ -536,29 +660,25 @@
     }
 
     // Backward-compatible entry point used by existing UI actions.
-    // It computes changes against the last cloud snapshot and queues only deltas.
+    // It records deltas against the last observed UI snapshot, even while the
+    // initial cloud request is still loading. The queue itself is durable.
     function syncToBackend() {
-      persistLocal();
-      if (!serverReady) {
-        // If the server has not loaded yet, keep the local state; do not overwrite
-        // cloud data with an incomplete local snapshot.
-        setSyncStatus('Tersimpan lokal - menunggu data cloud', 'fa-database', 'text-blue-500');
-        return;
-      }
+      const current = cloneData(notes);
+      const currentMap = new Map(current.map(note => [String(note.id), note]));
+      const previousMap = new Map(lastObservedNotes.map(note => [String(note.id), note]));
 
-      const currentIds = new Set(notes.map(n => String(n.id)));
-      const previous = window.__keepFlowLastNotes || [];
-      const previousMap = new Map(previous.map(n => [String(n.id), n]));
-
-      notes.forEach(note => {
+      current.forEach(note => {
         const old = previousMap.get(String(note.id));
-        if (!old || JSON.stringify(old) !== JSON.stringify(note)) enqueueOperation('save', note);
-      });
-      previous.forEach(old => {
-        if (!currentIds.has(String(old.id))) enqueueOperation('delete', old.id);
+        if (!old || JSON.stringify(old) !== JSON.stringify(note)) {
+          enqueueOperation('save', note);
+        }
       });
 
-      window.__keepFlowLastNotes = notes.map(n => ({ ...n }));
+      lastObservedNotes.forEach(old => {
+        if (!currentMap.has(String(old.id))) enqueueOperation('delete', old.id);
+      });
+
+      lastObservedNotes = current;
       persistLocal();
       flushPendingOperations();
     }
@@ -1086,7 +1206,8 @@
     });
 
     window.addEventListener('online', () => {
-      flushPendingOperations();
+      if (!serverReady) loadInitialData();
+      else flushPendingOperations();
     });
 
     document.addEventListener('DOMContentLoaded', () => {

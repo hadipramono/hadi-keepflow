@@ -1,28 +1,27 @@
-# Hadi KeepFlow v1.1.3
+# Hadi KeepFlow v1.2.0 — Tahap 1.1: Sync Queue
 
-Paket ini berisi revisi frontend dan backend Hadi KeepFlow.
+Paket ini berfokus pada stabilisasi antrean sinkronisasi frontend.
 
 ## Isi paket
 
-- `Index.html` — frontend aplikasi.
-- `Code.gs` — backend Google Apps Script.
-- `INSTALL.md` — petunjuk pemasangan dan deployment.
-- `TEST-CHECKLIST.md` — daftar pengujian setelah pemasangan.
+- `Index.html` — frontend dengan perbaikan Sync Queue.
+- `Code.gs` — salinan backend v1.1.3 untuk referensi; tidak perlu diganti pada tahap ini.
+- `INSTALL.md` — petunjuk pemasangan dan rollback.
+- `SYNC-QUEUE-TEST.md` — skenario regression test khusus antrean.
+- `TEST-CHECKLIST.md` — checklist pengujian umum.
+- `CHANGELOG-v1.2.0-phase-1.1.md` — ringkasan perubahan.
 
-## Penting sebelum pemasangan
+## Arsitektur yang dipertahankan
 
-1. Export catatan melalui fitur **Export JSON** pada aplikasi versi lama.
-2. Pastikan file Markdown di Google Drive tetap utuh.
-3. Jangan menghapus folder `apps/KeepFlow/storage`.
-4. Simpan salinan project Apps Script versi lama agar dapat dikembalikan jika diperlukan.
+- Frontend: HTML, Tailwind CSS, Vanilla JavaScript.
+- Backend: Google Apps Script.
+- Penyimpanan: file Markdown di Google Drive.
+- Cache lokal dan antrean: LocalStorage.
 
-## Catatan kompatibilitas
+Struktur folder dan format metadata Markdown di Google Drive tidak diubah.
 
-Backend mempertahankan struktur penyimpanan Google Drive:
-`My Drive/apps/KeepFlow/storage/<kategori>/<catatan>.md`
+## Validasi yang dilakukan
 
-Metadata catatan tetap menggunakan pembungkus `---JSON---` yang sudah digunakan versi sebelumnya.
-
-## Status validasi
-
-File disiapkan sebagai revisi kode. Paket ini belum menjalani pengujian langsung terhadap akun Google Drive atau deployment Apps Script milik pengguna. Lakukan checklist pengujian sebelum menjadikan v1.1.3 sebagai versi utama.
+- Pemeriksaan sintaks JavaScript inline dengan Node.js: lulus.
+- Pemeriksaan sintaks backend tidak berubah karena `Code.gs` tidak dimodifikasi.
+- Belum diuji langsung pada browser, deployment Apps Script, atau Google Drive pengguna.

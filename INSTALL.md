@@ -1,47 +1,41 @@
-# Instalasi Hadi KeepFlow v1.1
+# Instalasi Hadi KeepFlow v1.2.0 — Tahap 1.1
 
-## 1. Backup
+## 1. Backup terlebih dahulu
 
-- Pada aplikasi lama, jalankan **Export JSON**.
-- Di Google Drive, pastikan folder `apps/KeepFlow/storage` dan seluruh file Markdown masih tersedia.
-- Di Apps Script, buat salinan project atau simpan salinan isi `Code.gs` dan `Index.html` lama.
+- Jalankan **Export JSON** pada aplikasi lama.
+- Pastikan folder `apps/KeepFlow/storage` dan seluruh file Markdown di Google Drive masih tersedia.
+- Buat salinan project Apps Script atau simpan salinan file `Index.html` dan `Code.gs` lama.
 
-## 2. Ganti file Apps Script
+## 2. Ganti frontend
 
-1. Buka project Google Apps Script yang digunakan Hadi KeepFlow.
+Tahap 1.1 hanya mengubah antrean sinkronisasi di frontend.
+
+1. Buka project Google Apps Script.
 2. Buka file HTML bernama `Index`.
-3. Ganti seluruh isinya dengan file `Index.html` dari paket ini.
-4. Buka file script `Code.gs`.
-5. Ganti seluruh isinya dengan file `Code.gs` dari paket ini.
-6. Simpan project.
+3. Ganti seluruh isinya dengan `Index.html` dari paket ini.
+4. **Jangan mengganti `Code.gs`**; backend tidak berubah pada tahap ini.
+5. Simpan project.
 
-## 3. Deploy ulang
+## 3. Deploy versi baru
 
 1. Pilih **Deploy > Manage deployments**.
 2. Edit deployment Web App yang digunakan.
 3. Pada bagian Version, pilih **New version**.
-4. Periksa kembali pengaturan Execute as dan Who has access; pertahankan pengaturan yang memang digunakan sebelumnya.
+4. Pertahankan pengaturan Execute as dan Who has access yang digunakan sebelumnya.
 5. Klik Deploy.
-6. Buka URL Web App dan lakukan pengujian.
+6. Buka URL Web App dan lakukan pengujian berdasarkan `SYNC-QUEUE-TEST.md`.
 
-Jika menggunakan URL deployment lama, pastikan deployment tersebut sudah diarahkan ke versi baru.
+## 4. Rollback
 
-## 4. Catatan penting
+Jika ditemukan masalah:
+1. Buka project Apps Script.
+2. Pulihkan isi file HTML `Index` dari backup.
+3. Deploy sebagai New version.
+4. Jangan menghapus atau memindahkan file Google Drive untuk melakukan rollback.
 
-- Jangan menghapus folder atau file di Google Drive.
-- Jangan menjalankan fungsi penghapusan massal.
-- Penghapusan melalui aplikasi akan memindahkan file ke Trash Google Drive.
-- Simpan backup JSON sampai semua pengujian selesai.
-- Jika ada masalah, pulihkan kode Apps Script lama dari salinan backup. Jangan menghapus data Drive untuk melakukan rollback.
+## 5. Catatan penting
 
-## 5. Pengujian minimal
-
-Lakukan pengujian pada satu catatan percobaan terlebih dahulu:
-1. Buka catatan.
-2. Ubah judul dan isi, lalu simpan.
-3. Reload dan pastikan perubahan tetap ada.
-4. Hapus catatan percobaan.
-5. Periksa Google Drive Trash.
-6. Reload aplikasi dan pastikan catatan tidak muncul kembali.
-
-Lanjutkan pengujian lain berdasarkan `TEST-CHECKLIST.md`.
+- Format Markdown dan metadata Drive tidak berubah.
+- Queue lama `hadi_keepflow_pending_v1` tetap digunakan dan format antrean lama dimigrasikan saat dibaca.
+- Jangan membersihkan LocalStorage atau menghapus key antrean selama masih ada operasi tertunda.
+- Simpan backup JSON sampai seluruh pengujian selesai.
