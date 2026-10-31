@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.1
+ * Hadi KeepFlow v1.1.2
  * Google Apps Script backend.
  * Existing storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md
  */
@@ -31,6 +31,14 @@ function safeName(value, fallback) {
   return result || fallback || 'Tanpa Judul';
 }
 
+function toBoolean(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    return ['true', '1'].indexOf(value.trim().toLowerCase()) !== -1;
+  }
+  return false;
+}
+
 function parseNoteFile(file, categoryName) {
   const fileName = file.getName();
   const content = file.getBlob().getDataAsString('UTF-8');
@@ -56,8 +64,8 @@ function parseNoteFile(file, categoryName) {
     title: fileName.replace(/\.(md|txt)$/i, ''),
     content: body,
     category: categoryName || 'Umum',
-    isPinned: Boolean(meta.isPinned),
-    isArchived: Boolean(meta.isArchived),
+    isPinned: toBoolean(meta.isPinned),
+    isArchived: toBoolean(meta.isArchived),
     tags: Array.isArray(meta.tags) ? meta.tags.filter(t => typeof t === 'string') : [],
     createdAt: meta.createdAt || file.getDateCreated().toISOString(),
     updatedAt: file.getLastUpdated().toISOString()
