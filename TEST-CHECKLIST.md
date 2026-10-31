@@ -51,3 +51,9 @@ Checklist ini adalah rencana pengujian manual, bukan bukti bahwa seluruh skenari
 - [ ] HTML berbahaya dibersihkan dan format toolbar tetap berfungsi.
 - [ ] Tag dinormalisasi dan batas input diterapkan.
 - [ ] Regression offline, antrean, konflik, dan sinkronisasi tetap lulus.
+
+
+## v1.2.8 — Maintainability
+- [ ] Jalankan `MAINTAINABILITY-TEST.md`.
+- [ ] Pastikan seluruh file `.gs` dan HTML partial tersedia dengan nama tepat.
+- [ ] Pastikan tidak ada fungsi duplikat yang tertinggal di project Apps Script.

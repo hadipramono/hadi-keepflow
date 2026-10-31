@@ -3,52 +3,26 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
+**v1.2.8 — Tahap 2.4: Maintainability & Code Structure**
 
-**v1.2.7 — Tahap 2.3: Editor & Content Handling**
+## Source structure
+- `Index.html`: page markup and shell.
+- `AppStyles.html`: custom application CSS.
+- `AppScripts.html`: frontend application logic.
+- `Code.gs`: web entry point, HTML include helper, and general utilities.
+- `DriveStorage.gs`: Drive folder access, ownership validation, parsing, and file naming.
+- `SyncOperations.gs`: idempotency receipt lifecycle and replay.
+- `NotesApi.gs`: note list/save/delete and category operations.
 
-### Components
-- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, bounded retry scheduling, cached frontend rendering, responsive sidebar navigation, active-view context, empty states, persistent sync status, local editor drafts, safe rich-text sanitization, and normalized tags.
-- `Code.gs`: Apps Script backend with Drive ownership checks, optimistic version checks, and retry idempotency receipts.
+All `.gs` files share the Apps Script global namespace; public function names are retained for `google.script.run`.
 
-### Storage layout
+## Data and reliability safeguards
+This refactor is intended to preserve the v1.2.7 data format, LocalStorage keys, queue semantics, optimistic version checks, retry behavior, and Drive ownership checks. See prior `CHANGELOG-*.md` and test guides for the detailed safeguards and limitations.
 
-```text
-My Drive/
-└── apps/
-    └── KeepFlow/
-        └── storage/
-            ├── Umum/
-            │   └── note.md
-            └── Work/
-                └── project.md
-```
+## Tests
+Run `MAINTAINABILITY-TEST.md` plus the existing sync, offline, security, conflict, recovery, performance, navigation, and editor test guides. Browser and live Drive validation remain the project owner's responsibility.
 
-Files directly under `storage` are also accepted as notes in category Umum for compatibility with the reader.
 
-## Main safeguards
-- Pending sync operations retain immutable payload snapshots and stable operation IDs.
-- Queue metadata and note snapshots are persisted in LocalStorage.
-- Reconnect triggers cloud baseline reconciliation before queued writes are replayed.
-- Local pending saves/deletes are preserved during reconciliation.
-- Backend verifies a file's Drive parent chain before update or delete.
-- Drive mutations use `LockService` and stale save/delete requests return conflicts.
-- Conflict resolution requires an explicit local-vs-cloud choice.
-- Retry uses exponential backoff with jitter, capped at five minutes, and stops after ten consecutive failures pending manual retry.
-- Backend idempotency receipts make retrying the same operation ID safe after a lost browser response. Receipts are retained for seven days.
+## Hotfix v1.2.8.1
 
-## Installation
-See `INSTALL.md`. Run the test guides after deployment:
-- `SYNC-QUEUE-TEST.md`
-- `OFFLINE-RECONCILIATION-TEST.md`
-- `BACKEND-SECURITY-TEST.md`
-- `CONFLICT-VERSION-TEST.md`
-- `SYNC-RECOVERY-TEST.md`
-- `PERFORMANCE-UX-TEST.md`
-- `UX-NAVIGATION-TEST.md`
-- `EDITOR-CONTENT-TEST.md`
-
-## Important limitations
-- Version detection uses Drive modification timestamps, not a content hash or atomic Drive ETag precondition. Avoid direct manual edits to stored Markdown files while KeepFlow is in use.
-- Idempotency receipts are temporary Script Properties, not a permanent audit log. The retry guarantee applies to the same operation ID during the receipt retention window.
-- Editor drafts are local to one browser/device and are not synchronized until the user presses Simpan.
-- Browser, Apps Script deployment, and live Google Drive validation must be completed by the project owner.
+Fixes a documentation-comment boundary in `DriveStorage.gs` that hid the storage folder helper declarations. Replace the backend file `DriveStorage.gs` with this hotfix version. No other project files need to change.

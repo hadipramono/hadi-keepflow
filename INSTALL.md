@@ -1,19 +1,18 @@
-# Instalasi Hadi KeepFlow v1.2.7 — Tahap 2.3
+# Instalasi Hadi KeepFlow v1.2.8
 
-Tahap ini memperbarui editor frontend. Backend `Code.gs` tidak berubah.
+1. Backup seluruh project Apps Script dan export data JSON.
+2. Di editor Apps Script, buat/ganti file server `.gs`: `Code.gs`, `DriveStorage.gs`, `SyncOperations.gs`, `NotesApi.gs`.
+3. Buat/ganti file HTML: `Index.html`, `AppStyles.html`, `AppScripts.html`.
+4. Pastikan isi file lama yang sudah dipindahkan tidak tertinggal sebagai duplikasi fungsi.
+5. Simpan project dan periksa error syntax.
+6. Deploy sebagai **New version**.
+7. Jalankan `MAINTAINABILITY-TEST.md` dan checklist regresi sebelumnya.
 
-1. Backup JSON dari aplikasi.
-2. Backup project Apps Script yang sedang aktif.
-3. Ganti isi HTML file `Index` dengan `Index.html` dari paket ini.
-4. `Code.gs` tetap gunakan versi sebelumnya; file dalam ZIP disertakan untuk konsistensi distribusi.
-5. Simpan dan deploy sebagai **New version**.
-6. Jalankan `EDITOR-CONTENT-TEST.md` dan seluruh regression checklist sebelumnya.
+`Code.gs` sekarang menggunakan `createTemplateFromFile('Index').evaluate()` dan helper `include()` untuk memuat HTML partial.
 
-## Catatan penyimpanan draft
-- Draft editor memakai LocalStorage key `hadi_keepflow_editor_draft_v1`.
-- Jangan menghapus LocalStorage saat masih ada draft atau antrean sinkronisasi yang belum selesai.
-- Draft hanya disimpan di browser/perangkat tempat pengguna mengetik. Draft tidak disinkronkan antarperangkat sebelum tombol Simpan ditekan.
-- Saat draft dipulihkan dari baseline yang lebih lama, periksa isi dengan cermat sebelum menyimpan agar tidak menimpa perubahan cloud yang lebih baru.
+Tidak perlu menghapus LocalStorage. Jangan mengganti nama key antrean atau draft.
 
-## Rollback
-Kembalikan HTML `Index` dari backup v1.2.6 dan deploy sebagai New version. `Code.gs`, data Drive, dan antrean sinkronisasi tidak perlu diubah.
+
+## Hotfix v1.2.8.1
+
+If upgrading from v1.2.8, replace only `DriveStorage.gs` with the file in this package, save, and deploy a new Apps Script version. Do not delete or reset LocalStorage.
