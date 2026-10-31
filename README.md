@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.3.2 — Phase 3.3 Note Organization**
+**v1.3.3 — Phase 3.4 Editor Enhancement**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -55,3 +55,7 @@ Adds multi-field, multi-term search, quoted phrases, match highlighting, recent 
 
 ## v1.3.2 — Phase 3.3 Note Organization
 Adds multi-note selection and bulk organization actions: move to an existing category, add/remove tags, pin/unpin, and archive/restore. Selection is performed against the current filtered result set; permanent deletion remains an individual action for safety. No backend or data schema changes. See `CHANGELOG-v1.3.2-phase-3.3.md` and `NOTE-ORGANIZATION-TEST.md`.
+
+
+## v1.3.3 — Phase 3.4 Editor Enhancement
+Improves the writing experience with undo/redo, paragraph and heading formatting, blockquotes, lists, safe link insertion, horizontal separators, clear-formatting action, keyboard shortcuts, live word/character counts, and clearer editor typography. Existing local draft recovery and the sync queue are retained. No backend or data schema changes. See `CHANGELOG-v1.3.3-phase-3.4.md` and `EDITOR-ENHANCEMENT-TEST.md`.

@@ -77,3 +77,12 @@ If v1.3.1 is already installed, replace only:
 - `AppScripts.html`
 
 No `.gs` file changes or migrations are required. Save the Apps Script project and deploy as a **New version**. Do not clear LocalStorage; existing notes, categories, tags, sync queue, and backup data are preserved. Run `NOTE-ORGANIZATION-TEST.md` after deployment.
+
+
+## v1.3.3 — Phase 3.4 Editor Enhancement
+If v1.3.2 is already installed, replace only:
+- `Index.html`
+- `AppStyles.html`
+- `AppScripts.html`
+
+No `.gs` changes or migrations are required. Save the Apps Script project and deploy as a **New version**. Do not clear LocalStorage; editor draft recovery, notes, categories, tags, and sync queue remain compatible. Run `EDITOR-ENHANCEMENT-TEST.md` after deployment.

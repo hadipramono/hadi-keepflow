@@ -187,7 +187,7 @@
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.3.2 • Hybrid Drive
+          Hadi KeepFlow v1.3.3 • Hybrid Drive
         </div>
       </aside>
 
@@ -292,17 +292,26 @@
     </div>
 
     <!-- Formatting Toolbar -->
-    <div class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-4 py-2 flex flex-wrap items-center gap-1 shrink-0">
-      <button type="button" data-command="bold" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Bold"><i class="fa-solid fa-bold"></i></button>
-      <button type="button" data-command="italic" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Italic"><i class="fa-solid fa-italic"></i></button>
-      <button type="button" data-command="underline" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Underline"><i class="fa-solid fa-underline"></i></button>
-      <button type="button" data-command="strikeThrough" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Coret"><i class="fa-solid fa-strikethrough"></i></button>
+    <div id="editor-toolbar" role="toolbar" aria-label="Pemformatan catatan" class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 flex flex-wrap items-center gap-1 shrink-0">
+      <button type="button" data-command="undo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Urungkan (Ctrl+Z)" aria-label="Urungkan"><i class="fa-solid fa-rotate-left"></i></button>
+      <button type="button" data-command="redo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Ulangi (Ctrl+Y)" aria-label="Ulangi"><i class="fa-solid fa-rotate-right"></i></button>
       <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
+      <button type="button" data-command="bold" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Tebal (Ctrl+B)" aria-label="Tebal"><i class="fa-solid fa-bold"></i></button>
+      <button type="button" data-command="italic" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Miring (Ctrl+I)" aria-label="Miring"><i class="fa-solid fa-italic"></i></button>
+      <button type="button" data-command="underline" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Garis bawah (Ctrl+U)" aria-label="Garis bawah"><i class="fa-solid fa-underline"></i></button>
+      <button type="button" data-command="strikeThrough" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Coret" aria-label="Coret"><i class="fa-solid fa-strikethrough"></i></button>
+      <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
+      <button type="button" data-command="formatBlock" data-value="<p>" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Paragraf">P</button>
       <button type="button" data-command="formatBlock" data-value="<h1>" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-bold" title="Heading 1">H1</button>
       <button type="button" data-command="formatBlock" data-value="<h2>" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-bold" title="Heading 2">H2</button>
+      <button type="button" data-command="formatBlock" data-value="<blockquote>" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Kutipan"><i class="fa-solid fa-quote-left"></i></button>
       <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
-      <button type="button" data-command="insertUnorderedList" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Bullet List"><i class="fa-solid fa-list-ul"></i></button>
-      <button type="button" data-command="insertOrderedList" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Numbered List"><i class="fa-solid fa-list-ol"></i></button>
+      <button type="button" data-command="insertUnorderedList" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Daftar bullet"><i class="fa-solid fa-list-ul"></i></button>
+      <button type="button" data-command="insertOrderedList" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Daftar bernomor"><i class="fa-solid fa-list-ol"></i></button>
+      <button type="button" data-command="createLink" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Sisipkan tautan (Ctrl+K)" aria-label="Sisipkan tautan"><i class="fa-solid fa-link"></i></button>
+      <button type="button" data-command="insertHorizontalRule" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Garis pemisah"><i class="fa-solid fa-minus"></i></button>
+      <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
+      <button type="button" data-command="removeFormat" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Hapus format"><i class="fa-solid fa-eraser"></i></button>
     </div>
 
     <!-- Modal Body -->
@@ -320,7 +329,11 @@
       </div>
       <div id="editor-draft-status" class="text-xs text-gray-400 mb-3" role="status" aria-live="polite">Perubahan tersimpan lokal saat Anda mengetik.</div>
 
-      <div id="editor-content-editable" contenteditable="true" placeholder="Tulis catatan di sini..." class="w-full flex-1 bg-transparent border-0 focus:ring-0 px-0 resize-none text-base sm:text-lg text-gray-700 dark:text-gray-200 focus:outline-none min-h-[250px] outline-none"></div>
+      <div id="editor-content-editable" contenteditable="true" role="textbox" aria-label="Isi catatan" aria-multiline="true" spellcheck="true" placeholder="Tulis catatan di sini..." class="editor-content w-full flex-1 bg-transparent border-0 focus:ring-0 px-0 resize-none text-base sm:text-lg text-gray-700 dark:text-gray-200 focus:outline-none min-h-[250px] outline-none"></div>
+      <div id="editor-metrics" class="mt-3 flex items-center justify-between gap-3 text-[11px] text-gray-400" aria-live="polite">
+        <span id="editor-word-count">0 kata</span>
+        <span id="editor-char-count">0 karakter</span>
+      </div>
 
       <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex items-center space-x-2">
         <i class="fa-solid fa-tag text-gray-400 text-sm"></i>

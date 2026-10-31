@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.2 — Phase 3.3 Note Organization
+    // Hadi KeepFlow v1.3.3 — Phase 3.4 Editor Enhancement
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -156,22 +156,73 @@
       });
     }
 
+    function updateEditorMetrics() {
+      const editor = document.getElementById('editor-content-editable');
+      const wordNode = document.getElementById('editor-word-count');
+      const charNode = document.getElementById('editor-char-count');
+      if (!editor || !wordNode || !charNode) return;
+      const text = String(editor.innerText || editor.textContent || '').replace(/\u00a0/g, ' ').trim();
+      const words = text ? text.split(/\s+/u).filter(Boolean).length : 0;
+      wordNode.textContent = words.toLocaleString('id-ID') + ' kata';
+      charNode.textContent = text.length.toLocaleString('id-ID') + ' karakter';
+    }
+
+    function insertEditorLink() {
+      const editor = document.getElementById('editor-content-editable');
+      if (!editor) return;
+      const selection = window.getSelection();
+      const savedRange = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
+      const rawUrl = prompt('Masukkan URL tautan (https://, http://, atau mailto:):');
+      if (!rawUrl) { editor.focus(); return; }
+      let safeUrl;
+      try {
+        const candidate = rawUrl.trim();
+        if (!/^(https?:\/\/|mailto:)/i.test(candidate)) throw new Error('URL harus menyertakan skema yang diizinkan');
+        safeUrl = new URL(candidate);
+        if (!['http:', 'https:', 'mailto:'].includes(safeUrl.protocol)) throw new Error('Skema URL tidak diizinkan');
+      } catch (error) {
+        alert('URL tidak valid. Gunakan http://, https://, atau mailto:.');
+        editor.focus();
+        return;
+      }
+      editor.focus();
+      if (savedRange && selection) {
+        selection.removeAllRanges();
+        selection.addRange(savedRange);
+      }
+      document.execCommand('createLink', false, safeUrl.href);
+      updateToolbarState();
+      updateEditorMetrics();
+      scheduleEditorDraftSave();
+    }
+
     document.querySelectorAll('.toolbar-btn').forEach(btn => {
-      btn.addEventListener('click', function(e) {
-        e.preventDefault();
+      // Keep the content selection when a toolbar button is clicked.
+      btn.addEventListener('mousedown', event => event.preventDefault());
+      btn.addEventListener('click', function(event) {
+        event.preventDefault();
         const cmd = this.getAttribute('data-command');
         const val = this.getAttribute('data-value') || null;
+        const editor = document.getElementById('editor-content-editable');
+        if (!editor) return;
+        if (cmd === 'createLink') {
+          insertEditorLink();
+          return;
+        }
+        editor.focus();
         document.execCommand(cmd, false, val);
-        document.getElementById('editor-content-editable').focus();
         updateToolbarState();
+        updateEditorMetrics();
+        scheduleEditorDraftSave();
       });
     });
 
     const editableArea = document.getElementById('editor-content-editable');
     if (editableArea) {
-      editableArea.addEventListener('keyup', updateToolbarState);
+      editableArea.addEventListener('keyup', () => { updateToolbarState(); updateEditorMetrics(); });
       editableArea.addEventListener('mouseup', updateToolbarState);
       editableArea.addEventListener('focus', updateToolbarState);
+      editableArea.addEventListener('input', updateEditorMetrics);
     }
 
     function formatDate(isoString) {
@@ -1373,7 +1424,7 @@
     function sanitizeEditorHTML(html) {
       const parser = new DOMParser();
       const parsed = parser.parseFromString(String(html || ''), 'text/html');
-      const allowedTags = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'H1', 'H2', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'A']);
+      const allowedTags = new Set(['P', 'DIV', 'BR', 'HR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'H1', 'H2', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'A']);
       const cleanNode = node => {
         [...node.childNodes].forEach(child => {
           if (child.nodeType === Node.COMMENT_NODE) {
@@ -1465,6 +1516,7 @@
 
       editorDraftDirty = false;
       updateModalActionStates(currentNote);
+      updateEditorMetrics();
       editorModal.classList.remove('hidden');
       modalContentEditable.focus();
       updateToolbarState();
@@ -2122,10 +2174,24 @@
     });
     document.getElementById('modal-save-btn').addEventListener('click', saveActiveNote);
     document.addEventListener('keydown', event => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' &&
-          !editorModal.classList.contains('hidden')) {
+      if (editorModal.classList.contains('hidden')) return;
+      const modifier = event.ctrlKey || event.metaKey;
+      if (!modifier) return;
+      const key = event.key.toLowerCase();
+      if (key === 's') {
         event.preventDefault();
         saveActiveNote();
+      } else if (key === 'k') {
+        event.preventDefault();
+        insertEditorLink();
+      } else if ((key === 'z' && event.shiftKey) || key === 'y') {
+        event.preventDefault();
+        document.execCommand('redo', false, null);
+        updateToolbarState();
+        scheduleEditorDraftSave();
+      } else if (key === 'b' || key === 'i' || key === 'u') {
+        // Native browser formatting shortcuts are retained; refresh toolbar state afterward.
+        window.setTimeout(updateToolbarState, 0);
       }
     });
 
