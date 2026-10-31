@@ -393,6 +393,10 @@
     let syncRunning = false;
     let inFlightOperationId = null;
     let serverReady = false;
+    let queueInitialized = false;
+    let cloudLoadInProgress = false;
+    let cloudLoadRequestId = 0;
+    let refreshRequested = false;
     // Snapshot of the last UI state observed by syncToBackend().
     // This is deliberately separate from the last server response.
     let lastObservedNotes = [];
@@ -528,6 +532,11 @@
     function flushPendingOperations() {
       if (syncRunning) return;
 
+      if (cloudLoadInProgress) {
+        setSyncStatus('Memperbarui data cloud sebelum sinkronisasi...', 'fa-circle-notch fa-spin', 'text-blue-500');
+        return;
+      }
+
       if (!navigator.onLine) {
         setSyncStatus('Offline - perubahan masuk antrean', 'fa-triangle-exclamation', 'text-amber-500');
         return;
@@ -567,6 +576,10 @@
             if (failed) failed.attempts = (Number(failed.attempts) || 0) + 1;
             persistLocal();
             setSyncStatus('Sinkronisasi gagal - perubahan tetap antre', 'fa-triangle-exclamation', 'text-amber-500');
+            if (refreshRequested) {
+              refreshRequested = false;
+              loadInitialData();
+            }
             return;
           }
 
@@ -586,7 +599,12 @@
           syncRunning = false;
           inFlightOperationId = null;
           render();
-          flushPendingOperations();
+          if (refreshRequested) {
+            refreshRequested = false;
+            loadInitialData();
+          } else {
+            flushPendingOperations();
+          }
         })
         .withFailureHandler(error => {
           syncRunning = false;
@@ -596,6 +614,10 @@
           persistLocal();
           setSyncStatus('Gagal sinkron - tersimpan lokal, coba lagi saat online', 'fa-triangle-exclamation', 'text-amber-500');
           console.error('KeepFlow sync error:', error);
+          if (refreshRequested) {
+            refreshRequested = false;
+            loadInitialData();
+          }
         });
 
       if (operation.type === 'delete') runner.deleteNote(operation.id);
@@ -603,8 +625,22 @@
     }
 
     function loadInitialData() {
-      showLoader('Memuat data Hadi KeepFlow...');
-      readQueue();
+      // Never reconcile a cloud snapshot while a write is in flight. The
+      // snapshot could predate that write and reintroduce stale data.
+      if (syncRunning) {
+        refreshRequested = true;
+        return;
+      }
+      if (cloudLoadInProgress) {
+        refreshRequested = true;
+        return;
+      }
+
+      showLoader(serverReady ? 'Memperbarui data Hadi KeepFlow...' : 'Memuat data Hadi KeepFlow...');
+      if (!queueInitialized) {
+        readQueue();
+        queueInitialized = true;
+      }
 
       try {
         const localData = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
@@ -613,48 +649,81 @@
         notes = [];
       }
 
-      // Capture the initial local state. Changes made before getNotes() returns
-      // are diffed against this snapshot and enter the durable queue.
+      // Capture local state before the request. Any edits/deletes made while
+      // the request is pending are recorded in the durable queue by
+      // syncToBackend() and are applied over the returned cloud baseline.
       lastObservedNotes = cloneData(notes);
       render();
       hideLoader();
 
       if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) {
+        serverReady = false;
         setSyncStatus('Mode lokal - menunggu koneksi', 'fa-database', 'text-blue-500');
         return;
       }
 
+      const wasServerReady = serverReady;
+      serverReady = false;
+      cloudLoadInProgress = true;
+      const requestId = ++cloudLoadRequestId;
+
       google.script.run
         .withSuccessHandler(serverData => {
+          if (requestId !== cloudLoadRequestId) return;
+          cloudLoadInProgress = false;
+
           if (!Array.isArray(serverData)) {
-            setSyncStatus('Respons server tidak valid', 'fa-triangle-exclamation', 'text-amber-500');
+            serverReady = wasServerReady;
+            setSyncStatus('Respons server tidak valid - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
+            if (refreshRequested) {
+              refreshRequested = false;
+              loadInitialData();
+            } else if (serverReady) {
+              flushPendingOperations();
+            }
             return;
           }
 
           serverReady = true;
-          // Server is the baseline. Preserve local records that have pending
-          // saves, and honor queued deletes during reconciliation.
-          const queuedIds = new Set(pendingOperations.map(op => String(op.id)));
-          const localPending = notes.filter(note => queuedIds.has(String(note.id)));
+          // Cloud is the baseline. Preserve local notes with pending saves,
+          // and apply queued deletes as tombstones so they cannot reappear.
+          const queuedSaves = new Set(pendingOperations
+            .filter(op => op.type === 'save')
+            .map(op => String(op.id)));
+          const queuedDeletes = new Set(pendingOperations
+            .filter(op => op.type === 'delete')
+            .map(op => String(op.id)));
+          const localPending = notes.filter(note => queuedSaves.has(String(note.id)));
           const merged = new Map(serverData.map(note => [String(note.id), note]));
           localPending.forEach(note => merged.set(String(note.id), note));
 
-          notes = [...merged.values()].filter(note =>
-            !pendingOperations.some(op =>
-              op.type === 'delete' && String(op.id) === String(note.id)
-            )
-          );
+          notes = [...merged.values()].filter(note => !queuedDeletes.has(String(note.id)));
 
-          // The merged state becomes the next comparison point. Pending work
-          // remains represented by the queue and is sent after this point.
+          // Do not treat the server response as a user edit. Pending operations
+          // remain the authoritative record of local changes until acknowledged.
           lastObservedNotes = cloneData(notes);
           persistLocal();
           render();
-          flushPendingOperations();
+
+          if (refreshRequested) {
+            refreshRequested = false;
+            loadInitialData();
+          } else {
+            flushPendingOperations();
+          }
         })
         .withFailureHandler(error => {
+          if (requestId !== cloudLoadRequestId) return;
+          cloudLoadInProgress = false;
+          serverReady = wasServerReady;
           console.error('KeepFlow load error:', error);
-          setSyncStatus('Gagal memuat cloud - menggunakan data lokal', 'fa-triangle-exclamation', 'text-amber-500');
+          setSyncStatus('Gagal memuat cloud - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
+          if (refreshRequested) {
+            refreshRequested = false;
+            loadInitialData();
+          } else if (serverReady) {
+            flushPendingOperations();
+          }
         })
         .getNotes();
     }
@@ -1206,8 +1275,9 @@
     });
 
     window.addEventListener('online', () => {
-      if (!serverReady) loadInitialData();
-      else flushPendingOperations();
+      // Refresh the cloud baseline on every reconnect before replaying queued
+      // writes. This catches changes made from another tab/device.
+      loadInitialData();
     });
 
     document.addEventListener('DOMContentLoaded', () => {

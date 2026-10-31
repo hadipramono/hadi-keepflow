@@ -33,3 +33,12 @@ Gunakan catatan percobaan, bukan catatan penting. Pastikan backup tersedia.
 ## Catatan
 
 Checklist ini adalah rencana pengujian manual, bukan bukti bahwa seluruh skenario telah lulus. Sinkronisasi lintas tab/perangkat dan konflik edit bersamaan perlu diuji terpisah.
+
+## Tahap 1.2 — Offline & Reconciliation
+- [ ] Reconnect memicu pemuatan ulang baseline cloud.
+- [ ] Catatan dengan save tertunda tetap dipertahankan selama rekonsiliasi.
+- [ ] Catatan dengan delete tertunda tidak muncul kembali dari snapshot cloud.
+- [ ] Edit saat `getNotes()` berlangsung tidak hilang.
+- [ ] Refresh yang terjadi saat operasi tulis berlangsung ditunda hingga operasi selesai.
+- [ ] Kegagalan refresh tidak menghapus data lokal.
+- [ ] Lihat `OFFLINE-RECONCILIATION-TEST.md` untuk skenario lengkap.

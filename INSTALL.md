@@ -1,4 +1,4 @@
-# Instalasi Hadi KeepFlow v1.2.0 — Tahap 1.1
+# Instalasi Hadi KeepFlow v1.2.1 — Tahap 1.2
 
 ## 1. Backup terlebih dahulu
 
@@ -8,7 +8,7 @@
 
 ## 2. Ganti frontend
 
-Tahap 1.1 hanya mengubah antrean sinkronisasi di frontend.
+Tahap 1.2 hanya mengubah frontend (`Index.html`); backend `Code.gs` tidak berubah.
 
 1. Buka project Google Apps Script.
 2. Buka file HTML bernama `Index`.
@@ -23,7 +23,7 @@ Tahap 1.1 hanya mengubah antrean sinkronisasi di frontend.
 3. Pada bagian Version, pilih **New version**.
 4. Pertahankan pengaturan Execute as dan Who has access yang digunakan sebelumnya.
 5. Klik Deploy.
-6. Buka URL Web App dan lakukan pengujian berdasarkan `SYNC-QUEUE-TEST.md`.
+6. Buka URL Web App dan lakukan pengujian berdasarkan `SYNC-QUEUE-TEST.md` dan `OFFLINE-RECONCILIATION-TEST.md`.
 
 ## 4. Rollback
 
@@ -36,6 +36,6 @@ Jika ditemukan masalah:
 ## 5. Catatan penting
 
 - Format Markdown dan metadata Drive tidak berubah.
-- Queue lama `hadi_keepflow_pending_v1` tetap digunakan dan format antrean lama dimigrasikan saat dibaca.
+- Queue lama `hadi_keepflow_pending_v1` tetap digunakan. Format antrean lama dimigrasikan satu kali saat aplikasi pertama kali membaca queue.
 - Jangan membersihkan LocalStorage atau menghapus key antrean selama masih ada operasi tertunda.
 - Simpan backup JSON sampai seluruh pengujian selesai.
