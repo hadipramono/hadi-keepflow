@@ -3,7 +3,7 @@
 Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
 
 ## Current package
-**v1.3.3 — Phase 3.4 Editor Enhancement**
+**v1.3.5 — Phase 3.6 Productivity Features**
 
 ## Source structure
 - `Index.html`: page markup and shell.
@@ -59,3 +59,11 @@ Adds multi-note selection and bulk organization actions: move to an existing cat
 
 ## v1.3.3 — Phase 3.4 Editor Enhancement
 Improves the writing experience with undo/redo, paragraph and heading formatting, blockquotes, lists, safe link insertion, horizontal separators, clear-formatting action, keyboard shortcuts, live word/character counts, and clearer editor typography. Existing local draft recovery and the sync queue are retained. No backend or data schema changes. See `CHANGELOG-v1.3.3-phase-3.4.md` and `EDITOR-ENHANCEMENT-TEST.md`.
+
+
+## v1.3.4 — Phase 3.5 Dashboard & Personalization
+Adds a dedicated dashboard with active/pinned/archived/today-updated note statistics, recently updated notes, and category distribution. Adds local browser preferences for display name, system/light/dark theme, grid/list layout, and default sorting. Preferences are stored separately in LocalStorage; no backend, Drive metadata, or note schema changes. See `CHANGELOG-v1.3.4-phase-3.5.md` and `DASHBOARD-PERSONALIZATION-TEST.md`.
+
+
+## v1.3.5 — Phase 3.6 Productivity Features
+Adds four reusable note templates (meeting, Bible study, project plan, daily journal), interactive checklists, task completion metrics, and checklist state markers in note previews/search. Checklist content remains inside the existing note body; no task database or backend changes are introduced. See `CHANGELOG-v1.3.5-phase-3.6.md` and `PRODUCTIVITY-FEATURES-TEST.md`.

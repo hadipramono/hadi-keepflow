@@ -1,5 +1,18 @@
 <!-- Shared application styles. Included by Index.html. -->
   <style>
+    .dashboard-stat {
+      background: #fff; border: 1px solid #e5e7eb; border-radius: 1rem; padding: 1rem; min-width: 0;
+    }
+    .dark .dashboard-stat { background: #1f2937; border-color: #374151; }
+    .dashboard-stat-icon { width: 2.25rem; height: 2.25rem; border-radius: .75rem; display: flex; align-items: center; justify-content: center; margin-bottom: .75rem; }
+    .dashboard-stat-label { color: #6b7280; font-size: .72rem; line-height: 1.2; }
+    .dark .dashboard-stat-label { color: #9ca3af; }
+    .dashboard-stat-value { color: #111827; font-size: 1.65rem; font-weight: 700; line-height: 1.2; margin-top: .25rem; }
+    .dark .dashboard-stat-value { color: #f9fafb; }
+    .dashboard-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 1rem; padding: 1rem; min-width: 0; }
+    .dark .dashboard-panel { background: #1f2937; border-color: #374151; }
+    @media (min-width: 640px) { .dashboard-stat { padding: 1.15rem; } .dashboard-panel { padding: 1.25rem; } }
+
     .view-grid {
       column-count: 1;
       column-gap: 1rem;
@@ -62,6 +75,11 @@
     .editor-content a { color: #2563eb; text-decoration: underline; }
     .dark .editor-content a { color: #93c5fd; }
     .editor-content hr { border: 0; border-top: 1px solid #cbd5e1; margin: 1.25em 0; }
+    .editor-content ul.keepflow-checklist { list-style: none; padding-left: .25rem; }
+    .editor-content ul.keepflow-checklist li { display: flex; align-items: flex-start; gap: .55rem; margin: .35rem 0; }
+    .editor-content input[type="checkbox"] { width: 1rem; height: 1rem; flex: 0 0 auto; margin-top: .35em; accent-color: #2563eb; cursor: pointer; }
+    .editor-content input[type="checkbox"]:checked + span { color: #9ca3af; text-decoration: line-through; }
+    .dark .editor-content input[type="checkbox"]:checked + span { color: #6b7280; }
     .dark .toolbar-btn.active {
       background-color: rgba(59, 130, 246, 0.3);
       color: #60a5fa;

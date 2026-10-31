@@ -86,3 +86,27 @@ If v1.3.2 is already installed, replace only:
 - `AppScripts.html`
 
 No `.gs` changes or migrations are required. Save the Apps Script project and deploy as a **New version**. Do not clear LocalStorage; editor draft recovery, notes, categories, tags, and sync queue remain compatible. Run `EDITOR-ENHANCEMENT-TEST.md` after deployment.
+
+
+## v1.3.4 — Phase 3.5 Dashboard & Personalization
+
+If v1.3.3 is already installed, replace only these Apps Script HTML files:
+
+- `Index.html`
+- `AppStyles.html`
+- `AppScripts.html`
+
+Save the project and deploy as a new version. No `.gs` files, Drive folders, note metadata, or existing LocalStorage keys need to be changed. The new preferences use `hadi_keepflow_preferences_v1` and remain local to the current browser.
+
+After deployment, open Dashboard, configure the display name/theme/layout/default sort under the sliders icon, and verify the preference persists after reload. See `DASHBOARD-PERSONALIZATION-TEST.md`.
+
+
+## v1.3.5 — Phase 3.6 Productivity Features
+
+If upgrading from v1.3.4, replace only these Apps Script HTML files:
+
+- `Index.html`
+- `AppStyles.html`
+- `AppScripts.html`
+
+No `.gs` changes, Drive changes, or migrations are required. Save the project and deploy as a **New version**. Do not clear LocalStorage. Existing notes and editor drafts remain compatible. Test templates and checklists using `PRODUCTIVITY-FEATURES-TEST.md`.

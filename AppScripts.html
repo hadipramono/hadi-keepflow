@@ -1,8 +1,11 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.3 — Phase 3.4 Editor Enhancement
+    // Hadi KeepFlow v1.3.5 — Phase 3.6 Productivity Features
     let notes = [];
     let currentFilter = 'all';
+    let activeSection = 'dashboard';
+    const PREFERENCES_KEY = 'hadi_keepflow_preferences_v1';
+    let userPreferences = { displayName: '', theme: 'system', layout: 'grid', sort: 'updated_desc' };
     let currentCategory = null;
     let currentTag = null;
     let searchQuery = '';
@@ -160,11 +163,15 @@
       const editor = document.getElementById('editor-content-editable');
       const wordNode = document.getElementById('editor-word-count');
       const charNode = document.getElementById('editor-char-count');
+      const taskNode = document.getElementById('editor-task-count');
       if (!editor || !wordNode || !charNode) return;
       const text = String(editor.innerText || editor.textContent || '').replace(/\u00a0/g, ' ').trim();
       const words = text ? text.split(/\s+/u).filter(Boolean).length : 0;
+      const tasks = [...editor.querySelectorAll('input[type="checkbox"]')];
+      const completedTasks = tasks.filter(task => task.checked).length;
       wordNode.textContent = words.toLocaleString('id-ID') + ' kata';
       charNode.textContent = text.length.toLocaleString('id-ID') + ' karakter';
+      if (taskNode) taskNode.textContent = completedTasks.toLocaleString('id-ID') + '/' + tasks.length.toLocaleString('id-ID') + ' tugas';
     }
 
     function insertEditorLink() {
@@ -223,7 +230,19 @@
       editableArea.addEventListener('mouseup', updateToolbarState);
       editableArea.addEventListener('focus', updateToolbarState);
       editableArea.addEventListener('input', updateEditorMetrics);
+      editableArea.addEventListener('change', event => {
+        const checkbox = event.target.closest('input[type="checkbox"]');
+        if (!checkbox || !editableArea.contains(checkbox)) return;
+        if (checkbox.checked) checkbox.setAttribute('checked', '');
+        else checkbox.removeAttribute('checked');
+        scheduleEditorDraftSave();
+        updateEditorMetrics();
+      });
     }
+    const insertChecklistButton = document.getElementById('insert-checklist-btn');
+    insertChecklistButton.addEventListener('mousedown', event => event.preventDefault());
+    insertChecklistButton.addEventListener('click', insertEditorChecklist);
+    document.getElementById('editor-template-select').addEventListener('change', event => applyProductivityTemplate(event.target.value));
 
     function formatDate(isoString) {
       if (!isoString) return '-';
@@ -814,7 +833,7 @@
 
     function updateActiveNavigation() {
       document.querySelectorAll('.nav-item').forEach(button => {
-        const active = !currentCategory && !currentTag && button.dataset.filter === currentFilter;
+        const active = activeSection === 'notes' && !currentCategory && !currentTag && button.dataset.filter === currentFilter;
         button.classList.toggle('bg-blue-50', active);
         button.classList.toggle('dark:bg-blue-900/30', active);
         button.classList.toggle('text-blue-600', active);
@@ -943,6 +962,7 @@
       const categoryButton = event.target.closest('.category-select-btn');
       if (!categoryButton) return;
       event.preventDefault();
+      activeSection = 'notes';
       currentCategory = categoryButton.dataset.category;
       currentFilter = 'category';
       currentTag = null;
@@ -954,6 +974,7 @@
       const tagButton = event.target.closest('.tag-item');
       if (!tagButton) return;
       event.preventDefault();
+      activeSection = 'notes';
       currentTag = tagButton.dataset.tag;
       currentCategory = null;
       currentFilter = 'custom';
@@ -969,6 +990,9 @@
 
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = source;
+      tempDiv.querySelectorAll('input[type="checkbox"]').forEach(input => {
+        input.replaceWith(document.createTextNode(input.checked || input.hasAttribute('checked') ? '[x] ' : '[ ] '));
+      });
       const text = tempDiv.textContent || tempDiv.innerText || '';
       plainTextCache.set(note, { source, text, lower: text.toLowerCase() });
       return text;
@@ -1056,6 +1080,131 @@
       }
     }
 
+    function loadUserPreferences() {
+      try {
+        const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || '{}');
+        userPreferences = {
+          displayName: typeof saved.displayName === 'string' ? saved.displayName.slice(0, 40) : '',
+          theme: ['system', 'light', 'dark'].includes(saved.theme) ? saved.theme : 'system',
+          layout: saved.layout === 'list' ? 'list' : 'grid',
+          sort: ['updated_desc', 'updated_asc', 'created_desc', 'created_asc', 'title_asc', 'title_desc'].includes(saved.sort) ? saved.sort : 'updated_desc'
+        };
+      } catch (error) {
+        userPreferences = { displayName: '', theme: 'system', layout: 'grid', sort: 'updated_desc' };
+      }
+      isListView = userPreferences.layout === 'list';
+      sortMode = userPreferences.sort;
+      applyThemePreference();
+      syncPreferenceControls();
+    }
+
+    function saveUserPreferences() {
+      try { localStorage.setItem(PREFERENCES_KEY, JSON.stringify(userPreferences)); }
+      catch (error) { console.warn('KeepFlow preferences could not be saved:', error); }
+    }
+
+    function applyThemePreference() {
+      const dark = userPreferences.theme === 'dark' ||
+        (userPreferences.theme === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      document.documentElement.classList.toggle('dark', dark);
+      const icon = document.getElementById('theme-icon');
+      if (icon) {
+        icon.classList.toggle('fa-sun', dark);
+        icon.classList.toggle('fa-moon', !dark);
+      }
+    }
+
+    function syncPreferenceControls() {
+      const theme = document.getElementById('settings-theme');
+      const layout = document.getElementById('settings-layout');
+      const sort = document.getElementById('settings-sort');
+      const name = document.getElementById('settings-display-name');
+      if (theme) theme.value = userPreferences.theme;
+      if (layout) layout.value = userPreferences.layout;
+      if (sort) sort.value = userPreferences.sort;
+      if (name) name.value = userPreferences.displayName;
+      const sortControl = document.getElementById('sort-notes-select');
+      if (sortControl) sortControl.value = userPreferences.sort;
+      const viewIcon = document.getElementById('view-mode-icon');
+      if (viewIcon) viewIcon.className = isListView ? 'fa-solid fa-border-all text-lg' : 'fa-solid fa-list text-lg';
+    }
+
+    function openSettings() {
+      syncPreferenceControls();
+      const modal = document.getElementById('settings-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('settings-display-name').focus();
+    }
+
+    function closeSettings() {
+      const modal = document.getElementById('settings-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function saveSettingsFromForm() {
+      userPreferences.displayName = String(document.getElementById('settings-display-name').value || '').trim().slice(0, 40);
+      userPreferences.theme = document.getElementById('settings-theme').value;
+      userPreferences.layout = document.getElementById('settings-layout').value === 'list' ? 'list' : 'grid';
+      userPreferences.sort = document.getElementById('settings-sort').value;
+      isListView = userPreferences.layout === 'list';
+      sortMode = userPreferences.sort;
+      saveUserPreferences();
+      applyThemePreference();
+      syncPreferenceControls();
+      closeSettings();
+      render();
+    }
+
+    function switchToNotes(filter = 'all') {
+      activeSection = 'notes';
+      currentFilter = filter;
+      currentCategory = null;
+      currentTag = null;
+      closeSidebar();
+      render();
+    }
+
+    function renderDashboard() {
+      const active = notes.filter(note => !isArchivedNote(note));
+      const archived = notes.filter(isArchivedNote);
+      const pinned = active.filter(note => Boolean(note.isPinned));
+      const today = new Date().toDateString();
+      const updatedToday = active.filter(note => {
+        const date = new Date(note.updatedAt || note.createdAt || 0);
+        return !Number.isNaN(date.getTime()) && date.toDateString() === today;
+      });
+      const greetingHour = new Date().getHours();
+      const greeting = greetingHour < 11 ? 'Selamat pagi' : greetingHour < 15 ? 'Selamat siang' : greetingHour < 18 ? 'Selamat sore' : 'Selamat malam';
+      const name = userPreferences.displayName;
+      document.getElementById('dashboard-greeting').textContent = greeting + (name ? ', ' + name : ', selamat datang kembali');
+      document.getElementById('dashboard-title').textContent = 'Ruang kerja Anda';
+      document.getElementById('dashboard-date').textContent = new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+      document.getElementById('dashboard-stat-active').textContent = active.length;
+      document.getElementById('dashboard-stat-pinned').textContent = pinned.length;
+      document.getElementById('dashboard-stat-today').textContent = updatedToday.length;
+      document.getElementById('dashboard-stat-archive').textContent = archived.length;
+
+      const recent = [...active].sort((a, b) => (Date.parse(b.updatedAt || b.createdAt || 0) || 0) - (Date.parse(a.updatedAt || a.createdAt || 0) || 0)).slice(0, 5);
+      const recentContainer = document.getElementById('dashboard-recent-notes');
+      recentContainer.innerHTML = recent.length ? recent.map(note => {
+        const title = String(note.title || '').trim() || 'Tanpa Judul';
+        const snippet = getPlainText(note).slice(0, 105);
+        return `<button type="button" data-dashboard-note="${escapeHTML(String(note.id))}" class="w-full text-left flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition border border-transparent hover:border-gray-100 dark:hover:border-gray-700"><span class="mt-0.5 text-blue-500"><i class="fa-regular fa-note-sticky"></i></span><span class="min-w-0 flex-1"><strong class="block text-sm text-gray-800 dark:text-gray-100 truncate">${escapeHTML(title)}</strong><span class="block text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">${escapeHTML(snippet || 'Catatan kosong')}</span></span><span class="text-[10px] text-gray-400 whitespace-nowrap">${escapeHTML(formatDate(note.updatedAt || note.createdAt))}</span></button>`;
+      }).join('') : '<p class="text-sm text-gray-400 px-2 py-3">Belum ada catatan. Buat catatan pertama Anda.</p>';
+
+      const categoryCounts = new Map([...new Set([...DEFAULT_CATEGORIES, ...categories])].map(category => [String(category), 0]));
+      active.forEach(note => {
+        const category = String(note.category || 'Umum');
+        categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+      });
+      const categoryRows = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+      const maxCount = Math.max(1, ...categoryRows.map(row => row[1]));
+      document.getElementById('dashboard-category-count').textContent = categoryCounts.size;
+      document.getElementById('dashboard-categories').innerHTML = categoryRows.length ? categoryRows.map(([category, count]) => `<button type="button" data-dashboard-category="${escapeHTML(category)}" class="w-full text-left"><span class="flex justify-between gap-2 text-xs mb-1"><span class="truncate text-gray-600 dark:text-gray-300">${escapeHTML(category)}</span><strong class="text-gray-500 dark:text-gray-400">${count}</strong></span><span class="block h-1.5 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden"><span class="block h-full rounded-full bg-blue-500" style="width:${Math.round(count / maxCount * 100)}%"></span></span></button>`).join('') : '<p class="text-sm text-gray-400">Belum ada kategori.</p>';
+    }
+
     function getFilteredNotes() {
       const terms = getSearchTerms(searchQuery);
       return notes.filter(note => {
@@ -1137,6 +1286,17 @@
     }
 
     function render() {
+      const dashboardVisible = activeSection === 'dashboard';
+      document.getElementById('dashboard-view').classList.toggle('hidden', !dashboardVisible);
+      document.getElementById('notes-view-content').classList.toggle('hidden', dashboardVisible);
+      document.getElementById('quick-add-trigger').classList.toggle('hidden', dashboardVisible);
+      document.getElementById('dashboard-nav').classList.toggle('bg-blue-50', dashboardVisible);
+      document.getElementById('dashboard-nav').classList.toggle('dark:bg-blue-900/30', dashboardVisible);
+      document.getElementById('dashboard-nav').classList.toggle('text-blue-600', dashboardVisible);
+      document.getElementById('dashboard-nav').classList.toggle('dark:text-blue-400', dashboardVisible);
+      document.getElementById('dashboard-nav').classList.toggle('text-gray-600', !dashboardVisible);
+      document.getElementById('dashboard-nav').classList.toggle('dark:text-gray-400', !dashboardVisible);
+      renderDashboard();
       const filtered = getFilteredNotes();
       const existingIds = new Set(notes.map(note => String(note.id)));
       [...selectedNoteIds].forEach(id => { if (!existingIds.has(id)) selectedNoteIds.delete(id); });
@@ -1419,12 +1579,66 @@
       return [...unique.values()].slice(0, 50);
     }
 
+    // Productivity templates are HTML fragments stored inside the existing note body.
+    // They do not introduce a separate task model or change the Drive data schema.
+    function getProductivityTemplates() {
+      const today = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+      return {
+        meeting: {
+          title: 'Catatan Rapat - ' + today,
+          content: '<h1>Catatan Rapat</h1><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Agenda</h2><ul><li></li></ul><h2>Peserta</h2><p></p><h2>Diskusi</h2><p></p><h2>Keputusan</h2><ul><li></li></ul><h2>Tindak Lanjut</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Tugas, penanggung jawab, dan tenggat</span></li><li><input type="checkbox"> <span></span></li></ul>'
+        },
+        'bible-study': {
+          title: 'Studi Alkitab - ' + today,
+          content: '<h1>Studi Alkitab</h1><p><strong>Bagian Alkitab:</strong> </p><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Observasi</h2><ul><li></li></ul><h2>Interpretasi</h2><p></p><h2>Aplikasi</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Apa yang perlu saya lakukan?</span></li><li><input type="checkbox"> <span></span></li></ul><h2>Doa</h2><p></p>'
+        },
+        project: {
+          title: 'Rencana Proyek - ' + today,
+          content: '<h1>Rencana Proyek</h1><h2>Tujuan</h2><p></p><h2>Ruang Lingkup</h2><ul><li></li></ul><h2>Tahapan dan Tugas</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Definisikan kebutuhan</span></li><li><input type="checkbox"> <span>Susun rencana kerja</span></li><li><input type="checkbox"> <span>Review hasil</span></li></ul><h2>Risiko / Catatan</h2><p></p>'
+        },
+        daily: {
+          title: 'Jurnal Harian - ' + today,
+          content: '<h1>Jurnal Harian</h1><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Prioritas Hari Ini</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span></span></li><li><input type="checkbox"> <span></span></li><li><input type="checkbox"> <span></span></li></ul><h2>Hal yang Disyukuri</h2><ul><li></li></ul><h2>Refleksi</h2><p></p><h2>Catatan untuk Besok</h2><p></p>'
+        }
+      };
+    }
+
+    function applyProductivityTemplate(templateKey) {
+      const select = document.getElementById('editor-template-select');
+      const editor = document.getElementById('editor-content-editable');
+      const titleInput = document.getElementById('modal-title-input');
+      if (!select || !editor || !titleInput || !templateKey) return;
+      const template = getProductivityTemplates()[templateKey];
+      if (!template) { select.value = ''; return; }
+      const hasContent = Boolean(editor.textContent.trim() || editor.querySelector('img, input, hr'));
+      if (hasContent && !confirm('Gunakan template ini dan mengganti isi catatan saat ini?')) {
+        select.value = '';
+        return;
+      }
+      editor.innerHTML = sanitizeEditorHTML(template.content);
+      if (!titleInput.value.trim()) titleInput.value = template.title;
+      updateEditorMetrics();
+      scheduleEditorDraftSave();
+      editor.focus();
+      select.value = '';
+    }
+
+    function insertEditorChecklist() {
+      const editor = document.getElementById('editor-content-editable');
+      if (!editor) return;
+      editor.focus();
+      const checklistHTML = '<ul class="keepflow-checklist"><li><input type="checkbox"> <span>Tugas baru</span></li><li><input type="checkbox"> <span></span></li><li><input type="checkbox"> <span></span></li></ul><p></p>';
+      document.execCommand('insertHTML', false, checklistHTML);
+      updateEditorMetrics();
+      scheduleEditorDraftSave();
+    }
+
     // Keep editor HTML limited to formatting produced by the toolbar and safe links.
     // Pasted scripts, event attributes, styles and unsafe URL schemes are removed.
     function sanitizeEditorHTML(html) {
       const parser = new DOMParser();
       const parsed = parser.parseFromString(String(html || ''), 'text/html');
-      const allowedTags = new Set(['P', 'DIV', 'BR', 'HR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'H1', 'H2', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'A']);
+      const allowedTags = new Set(['P', 'DIV', 'BR', 'HR', 'STRONG', 'B', 'EM', 'I', 'U', 'S', 'STRIKE', 'H1', 'H2', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'A', 'INPUT', 'SPAN']);
       const cleanNode = node => {
         [...node.childNodes].forEach(child => {
           if (child.nodeType === Node.COMMENT_NODE) {
@@ -1442,7 +1656,16 @@
             return;
           }
           const href = child.tagName === 'A' ? child.getAttribute('href') : null;
+          const isCheckbox = child.tagName === 'INPUT' && String(child.getAttribute('type') || '').toLowerCase() === 'checkbox';
+          const isChecked = isCheckbox && (child.checked || child.hasAttribute('checked'));
+          const isChecklist = child.tagName === 'UL' && child.classList.contains('keepflow-checklist');
           [...child.attributes].forEach(attr => child.removeAttribute(attr.name));
+          if (child.tagName === 'INPUT') {
+            if (!isCheckbox) { child.remove(); return; }
+            child.setAttribute('type', 'checkbox');
+            if (isChecked) child.setAttribute('checked', '');
+          }
+          if (isChecklist) child.className = 'keepflow-checklist';
           if (child.tagName === 'A' && href) {
             try {
               const url = new URL(href, window.location.href);
@@ -1473,6 +1696,8 @@
         currentNote = notes.find(n => String(n.id) === String(noteId));
       }
       editorBaseline = currentNote ? cloneData(currentNote) : null;
+      const templateSelect = document.getElementById('editor-template-select');
+      if (templateSelect) templateSelect.value = '';
 
       if (currentNote) {
         modalTitle.value = currentNote.title || '';
@@ -1712,7 +1937,7 @@
           format: KEEPFLOW_BACKUP_FORMAT,
           schemaVersion: KEEPFLOW_BACKUP_SCHEMA,
           application: 'Hadi KeepFlow',
-          applicationVersion: '1.3.2',
+          applicationVersion: '1.3.5',
           createdAt: snapshot.generatedAt || new Date().toISOString(),
           noteCount: cloudNotes.length,
           categories: [...new Set(['Umum', ...cloudCategories])],
@@ -2046,6 +2271,7 @@
 
     document.getElementById('toggle-view-mode').addEventListener('click', () => {
       isListView = !isListView;
+      userPreferences.layout = isListView ? 'list' : 'grid'; saveUserPreferences();
       const viewIcon = document.getElementById('view-mode-icon');
       viewIcon.className = isListView ? 'fa-solid fa-border-all text-lg' : 'fa-solid fa-list text-lg';
       render();
@@ -2184,6 +2410,9 @@
       } else if (key === 'k') {
         event.preventDefault();
         insertEditorLink();
+      } else if (key === 'l' && event.shiftKey) {
+        event.preventDefault();
+        insertEditorChecklist();
       } else if ((key === 'z' && event.shiftKey) || key === 'y') {
         event.preventDefault();
         document.execCommand('redo', false, null);
@@ -2268,6 +2497,7 @@
     document.getElementById('empty-state-create').addEventListener('click', () => openEditor(null));
 
     document.getElementById('clear-view-filter').addEventListener('click', () => {
+      activeSection = 'notes';
       currentFilter = 'all';
       currentCategory = null;
       currentTag = null;
@@ -2292,6 +2522,7 @@
     });
     searchInput.addEventListener('input', (event) => {
       searchQuery = event.target.value;
+      if (searchQuery.trim()) activeSection = 'notes';
       clearSearchButton.classList.toggle('hidden', !searchQuery);
       hideRecentSearches();
       if (searchRenderTimer) clearTimeout(searchRenderTimer);
@@ -2319,6 +2550,7 @@
     document.getElementById('recent-search-list').addEventListener('click', event => {
       const button = event.target.closest('[data-recent-search]');
       if (!button) return;
+      activeSection = 'notes';
       searchQuery = button.dataset.recentSearch || '';
       searchInput.value = searchQuery;
       clearSearchButton.classList.toggle('hidden', !searchQuery);
@@ -2339,6 +2571,7 @@
     });
     document.getElementById('sort-notes-select').addEventListener('change', event => {
       sortMode = event.target.value || 'updated_desc';
+      userPreferences.sort = sortMode; saveUserPreferences();
       render();
     });
     document.addEventListener('click', event => {
@@ -2348,14 +2581,46 @@
     });
 
     document.getElementById('toggle-theme').addEventListener('click', () => {
-      document.documentElement.classList.toggle('dark');
-      const icon = document.getElementById('theme-icon');
-      icon.classList.toggle('fa-moon'); icon.classList.toggle('fa-sun');
+      const isDark = document.documentElement.classList.contains('dark');
+      userPreferences.theme = isDark ? 'light' : 'dark';
+      saveUserPreferences();
+      applyThemePreference();
     });
+
+    document.getElementById('dashboard-nav').addEventListener('click', () => {
+      activeSection = 'dashboard';
+      currentFilter = 'all'; currentCategory = null; currentTag = null;
+      searchQuery = ''; searchInput.value = ''; clearSearchButton.classList.add('hidden');
+      closeSidebar(); render();
+    });
+    document.getElementById('dashboard-new-note').addEventListener('click', () => openEditor(null));
+    document.getElementById('dashboard-all-notes').addEventListener('click', () => switchToNotes('all'));
+    document.getElementById('dashboard-recent-notes').addEventListener('click', event => {
+      const button = event.target.closest('[data-dashboard-note]');
+      if (!button) return;
+      const note = notes.find(item => String(item.id) === String(button.dataset.dashboardNote));
+      if (note) openEditor(note.id);
+    });
+    document.getElementById('dashboard-categories').addEventListener('click', event => {
+      const button = event.target.closest('[data-dashboard-category]');
+      if (!button) return;
+      activeSection = 'notes'; currentFilter = 'all'; currentCategory = button.dataset.dashboardCategory; currentTag = null;
+      closeSidebar(); render();
+    });
+    document.getElementById('open-settings-btn').addEventListener('click', openSettings);
+    document.getElementById('close-settings-btn').addEventListener('click', closeSettings);
+    document.getElementById('cancel-settings-btn').addEventListener('click', closeSettings);
+    document.getElementById('save-settings-btn').addEventListener('click', saveSettingsFromForm);
+    document.getElementById('settings-modal').addEventListener('click', event => { if (event.target.id === 'settings-modal') closeSettings(); });
+    if (window.matchMedia) {
+      const systemTheme = window.matchMedia('(prefers-color-scheme: dark)');
+      systemTheme.addEventListener && systemTheme.addEventListener('change', () => { if (userPreferences.theme === 'system') applyThemePreference(); });
+    }
 
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
+        activeSection = 'notes';
         currentFilter = btn.dataset.filter;
         currentCategory = null;
         currentTag = null;
@@ -2373,6 +2638,7 @@
         searchInput.select();
       }
       if (event.key === 'Escape') {
+        closeSettings();
         closeSidebar();
         hideRecentSearches();
       }
@@ -2420,6 +2686,7 @@
     });
 
     document.addEventListener('DOMContentLoaded', () => {
+      loadUserPreferences();
       loadSearchHistory();
       renderRecentSearches();
       loadInitialData();
