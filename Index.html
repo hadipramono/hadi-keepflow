@@ -88,6 +88,15 @@
       background-color: rgba(59, 130, 246, 0.3);
       color: #60a5fa;
     }
+    .sidebar-backdrop { display: none; }
+    @media (max-width: 1023px) {
+      #sidebar { position: fixed; top: 4rem; bottom: 0; left: 0; z-index: 35; width: min(18rem, 86vw); transform: translateX(-105%); box-shadow: 0 12px 32px rgba(0,0,0,.18); }
+      #sidebar.sidebar-open { transform: translateX(0); }
+      .sidebar-backdrop.sidebar-backdrop-open { display: block; }
+    }
+    @media (min-width: 1024px) {
+      #sidebar.sidebar-collapsed { display: none; }
+    }
     .action-btn.active {
       background-color: rgba(59, 130, 246, 0.15) !important;
       color: #3b82f6 !important;
@@ -113,9 +122,9 @@
 
   <div id="app" class="flex flex-col h-screen overflow-hidden">
     <!-- Top Header -->
-    <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-4 z-20 shrink-0">
+    <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-2 sm:px-4 gap-2 z-20 shrink-0">
       <div class="flex items-center space-x-3">
-        <button id="toggle-sidebar" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+        <button id="toggle-sidebar" aria-label="Buka atau tutup navigasi" aria-expanded="false" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
           <i class="fa-solid fa-bars text-lg"></i>
         </button>
         <div class="flex items-center space-x-2">
@@ -125,12 +134,12 @@
       </div>
 
       <!-- Search Bar & Date Filter -->
-      <div class="flex-1 max-w-2xl mx-4 flex items-center gap-2">
+      <div class="flex-1 min-w-0 max-w-2xl mx-1 sm:mx-4 flex items-center gap-2">
         <div class="relative flex-1">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
           <input type="text" id="search-input" placeholder="Cari judul atau isi catatan..." class="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 text-sm transition">
         </div>
-        <button id="date-filter-toggle" class="px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 flex items-center space-x-2 shrink-0 transition" title="Filter Berdasarkan Tanggal">
+        <button id="date-filter-toggle" aria-pressed="false" class="px-2 sm:px-3 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-xl text-sm text-gray-600 dark:text-gray-300 flex items-center space-x-2 shrink-0 transition" title="Filter Berdasarkan Tanggal">
           <i class="fa-regular fa-calendar-days"></i>
           <span id="date-filter-label" class="hidden md:inline">Semua Tanggal</span>
         </button>
@@ -172,10 +181,23 @@
       <button id="reset-date-filter" class="text-xs text-blue-600 dark:text-blue-400 hover:underline">Reset Filter</button>
     </div>
 
+    <!-- Persistent sync status: visible even when the editor is closed -->
+    <div id="app-status-bar" class="min-h-9 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 sm:px-6 py-1.5 flex items-center justify-between gap-3 shrink-0 text-xs" aria-live="polite">
+      <div class="flex items-center gap-2 min-w-0">
+        <span id="sync-status" class="text-gray-400 flex items-center gap-2 min-w-0">
+          <i class="fa-solid fa-cloud"></i><span class="truncate">Hadi KeepFlow Hybrid Mode</span>
+        </span>
+        <span id="sync-queue-count" class="hidden rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 whitespace-nowrap">0 tertunda</span>
+      </div>
+      <button id="retry-sync" type="button" class="hidden text-xs px-3 py-1 rounded-lg bg-blue-600 text-white hover:bg-blue-700 shrink-0">Coba lagi</button>
+    </div>
+
+    <div id="sidebar-backdrop" class="sidebar-backdrop fixed inset-0 top-16 z-30 bg-gray-900/40" aria-hidden="true"></div>
+
     <!-- Main Container -->
     <div class="flex flex-1 overflow-hidden">
       <!-- Sidebar -->
-      <aside id="sidebar" class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col justify-between shrink-0 transition-all duration-200 overflow-y-auto custom-scrollbar">
+      <aside id="sidebar" class="w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700 flex flex-col justify-between shrink-0 transition-all duration-200 overflow-y-auto custom-scrollbar lg:static">
         <div class="p-4 space-y-1">
           <button data-filter="all" class="nav-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-medium">
             <i class="fa-solid fa-lightbulb w-5 text-center"></i>
@@ -221,7 +243,7 @@
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.1 • Hybrid Drive
+          Hadi KeepFlow v1.2.6 • Hybrid Drive
         </div>
       </aside>
 
@@ -233,6 +255,23 @@
             <span class="text-gray-400 text-sm">Buat catatan baru...</span>
             <i class="fa-solid fa-pen-to-square text-gray-400"></i>
           </div>
+        </div>
+
+        <!-- Active view context -->
+        <div id="active-view-bar" class="max-w-4xl mx-auto mb-4 flex items-center justify-between gap-3">
+          <div class="min-w-0">
+            <h1 id="active-view-title" class="text-lg font-semibold text-gray-800 dark:text-gray-100 truncate">Semua Catatan</h1>
+            <p id="active-view-meta" class="text-xs text-gray-400">0 catatan</p>
+          </div>
+          <button id="clear-view-filter" type="button" class="hidden text-xs text-blue-600 dark:text-blue-400 hover:underline shrink-0">Hapus filter</button>
+        </div>
+
+        <!-- Empty state -->
+        <div id="notes-empty-state" class="hidden max-w-4xl mx-auto py-14 px-4 text-center bg-white dark:bg-gray-800 border border-dashed border-gray-300 dark:border-gray-700 rounded-2xl">
+          <i class="fa-regular fa-note-sticky text-3xl text-gray-300 dark:text-gray-600 mb-3"></i>
+          <h2 id="empty-state-title" class="font-semibold text-gray-700 dark:text-gray-200">Belum ada catatan</h2>
+          <p id="empty-state-message" class="text-sm text-gray-400 mt-1">Buat catatan pertama Anda.</p>
+          <button id="empty-state-create" type="button" class="mt-4 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm">Buat catatan</button>
         </div>
 
         <!-- Pinned Section -->
@@ -310,19 +349,11 @@
       </div>
     </div>
 
-    <!-- Modal Footer -->
-    <div class="h-14 border-t border-gray-200 dark:border-gray-800 px-4 sm:px-6 flex items-center justify-between shrink-0 bg-white dark:bg-gray-900">
-      <span id="sync-status" class="text-xs text-gray-400 flex items-center space-x-2">
-        <i class="fa-solid fa-cloud"></i>
-        <span>Hadi KeepFlow Hybrid Mode</span>
-      </span>
-      <button id="retry-sync" type="button" class="hidden text-xs px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700">Coba lagi</button>
-    </div>
   </div>
 
   <!-- JavaScript Logic -->
   <script>
-    // Hadi KeepFlow v1.2.5 — Tahap 2.1: Frontend Performance
+    // Hadi KeepFlow v1.2.6 — Tahap 2.2: UX & Navigation
     let notes = [];
     let currentFilter = 'all';
     let currentCategory = null;
@@ -469,6 +500,7 @@
         setSyncStatus('Gagal menyimpan antrean lokal', 'fa-triangle-exclamation', 'text-red-500');
       }
 
+      updateQueueIndicator();
       try {
         localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
       } catch (e) {
@@ -480,7 +512,19 @@
 
     function setSyncStatus(message, icon = 'fa-cloud', color = 'text-gray-400') {
       const el = document.getElementById('sync-status');
-      if (el) el.innerHTML = `<i class="fa-solid ${icon} ${color}"></i><span>${escapeHTML(message)}</span>`;
+      if (el) {
+        el.innerHTML = `<i class="fa-solid ${icon} ${color}"></i><span class="truncate">${escapeHTML(message)}</span>`;
+        el.title = message;
+      }
+      updateQueueIndicator();
+    }
+
+    function updateQueueIndicator() {
+      const indicator = document.getElementById('sync-queue-count');
+      if (!indicator) return;
+      const count = pendingOperations.length;
+      indicator.textContent = `${count} tertunda`;
+      indicator.classList.toggle('hidden', count === 0);
     }
 
     function showManualRetry(show) {
@@ -921,6 +965,78 @@
     const tagsList = document.getElementById('tags-list');
     const categoriesList = document.getElementById('categories-list');
     const modalCategorySelect = document.getElementById('modal-category-select');
+    const sidebar = document.getElementById('sidebar');
+    const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
+    function closeSidebar() {
+      sidebar.classList.remove('sidebar-open');
+      sidebarBackdrop.classList.remove('sidebar-backdrop-open');
+      const isMobile = window.matchMedia('(max-width: 1023px)').matches;
+      document.getElementById('toggle-sidebar').setAttribute('aria-expanded', String(!isMobile && !sidebar.classList.contains('sidebar-collapsed')));
+    }
+
+    function toggleSidebar() {
+      const isMobile = window.matchMedia('(max-width: 1023px)').matches;
+      if (isMobile) {
+        const willOpen = !sidebar.classList.contains('sidebar-open');
+        sidebar.classList.toggle('sidebar-open', willOpen);
+        sidebarBackdrop.classList.toggle('sidebar-backdrop-open', willOpen);
+        document.getElementById('toggle-sidebar').setAttribute('aria-expanded', String(willOpen));
+      } else {
+        sidebar.classList.toggle('sidebar-collapsed');
+        document.getElementById('toggle-sidebar').setAttribute('aria-expanded', String(!sidebar.classList.contains('sidebar-collapsed')));
+      }
+    }
+
+    closeSidebar();
+
+    function updateActiveNavigation() {
+      document.querySelectorAll('.nav-item').forEach(button => {
+        const active = !currentCategory && !currentTag && button.dataset.filter === currentFilter;
+        button.classList.toggle('bg-blue-50', active);
+        button.classList.toggle('dark:bg-blue-900/30', active);
+        button.classList.toggle('text-blue-600', active);
+        button.classList.toggle('dark:text-blue-400', active);
+        button.classList.toggle('font-medium', active);
+        button.classList.toggle('text-gray-600', !active);
+        button.classList.toggle('dark:text-gray-400', !active);
+      });
+    }
+
+    function updateActiveView(filteredCount) {
+      const title = document.getElementById('active-view-title');
+      const meta = document.getElementById('active-view-meta');
+      const clearButton = document.getElementById('clear-view-filter');
+      const emptyState = document.getElementById('notes-empty-state');
+      const hasViewFilter = currentFilter !== 'all' || currentCategory || currentTag;
+      let label = 'Semua Catatan';
+      if (currentFilter === 'pinned') label = 'Disematkan';
+      else if (currentFilter === 'archive') label = 'Arsip';
+      else if (currentCategory) label = currentCategory;
+      else if (currentTag) label = `Label: ${currentTag}`;
+      title.textContent = label;
+      const parts = [`${filteredCount} catatan`];
+      if (searchQuery.trim()) parts.push('pencarian aktif');
+      if (datePreset !== 'all') parts.push('filter tanggal aktif');
+      meta.textContent = parts.join(' • ');
+      clearButton.classList.toggle('hidden', !hasViewFilter);
+      emptyState.classList.toggle('hidden', filteredCount !== 0);
+      if (filteredCount === 0) {
+        const searching = Boolean(searchQuery.trim());
+        document.getElementById('empty-state-title').textContent = searching ? 'Tidak ada hasil pencarian' : 'Belum ada catatan di tampilan ini';
+        document.getElementById('empty-state-message').textContent = searching ? 'Coba kata kunci lain atau hapus filter.' : 'Anda dapat membuat catatan baru atau memilih tampilan lain.';
+      }
+      updateActiveNavigation();
+      const dateLabel = document.getElementById('date-filter-label');
+      const dateButton = document.getElementById('date-filter-toggle');
+      const labels = { all: 'Semua Tanggal', today: 'Hari Ini', '7days': '7 Hari', '30days': '30 Hari', custom: 'Kustom' };
+      if (dateLabel) dateLabel.textContent = labels[datePreset] || 'Tanggal';
+      if (dateButton) {
+        dateButton.classList.toggle('ring-2', datePreset !== 'all');
+        dateButton.classList.toggle('ring-blue-500', datePreset !== 'all');
+        dateButton.setAttribute('aria-pressed', String(datePreset !== 'all'));
+      }
+    }
 
     // Event delegation keeps listener count constant as cards and navigation
     // lists are rebuilt. This is cheaper and avoids stale per-element handlers.
@@ -952,13 +1068,10 @@
       const categoryButton = event.target.closest('.category-select-btn');
       if (!categoryButton) return;
       event.preventDefault();
-      document.querySelectorAll('.nav-item').forEach(button => {
-        button.classList.remove('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
-        button.classList.add('text-gray-600', 'dark:text-gray-400');
-      });
       currentCategory = categoryButton.dataset.category;
       currentFilter = 'category';
       currentTag = null;
+      closeSidebar();
       render();
     });
 
@@ -969,6 +1082,7 @@
       currentTag = tagButton.dataset.tag;
       currentCategory = null;
       currentFilter = 'custom';
+      closeSidebar();
       render();
     });
 
@@ -1043,6 +1157,7 @@
 
     function render() {
       const filtered = getFilteredNotes();
+      updateActiveView(filtered.length);
       notesGrid.className = isListView ? 'view-list' : 'view-grid';
       pinnedGrid.className = isListView ? 'view-list' : 'view-grid';
       
@@ -1318,7 +1433,10 @@
     });
 
     document.getElementById('date-filter-toggle').addEventListener('click', () => {
-      document.getElementById('date-filter-panel').classList.toggle('hidden');
+      const panel = document.getElementById('date-filter-panel');
+      const opening = panel.classList.contains('hidden');
+      panel.classList.toggle('hidden', !opening);
+      document.getElementById('date-filter-toggle').setAttribute('aria-expanded', String(opening));
     });
 
     document.getElementById('date-preset-select').addEventListener('change', (e) => {
@@ -1343,6 +1461,8 @@
       document.getElementById('date-preset-select').value = 'all';
       document.getElementById('custom-date-inputs').classList.add('hidden');
       customStartDate = null; customEndDate = null;
+      document.getElementById('date-filter-panel').classList.add('hidden');
+      document.getElementById('date-filter-toggle').setAttribute('aria-expanded', 'false');
       render();
     });
 
@@ -1432,6 +1552,15 @@
       }
     });
 
+    document.getElementById('empty-state-create').addEventListener('click', () => openEditor(null));
+
+    document.getElementById('clear-view-filter').addEventListener('click', () => {
+      currentFilter = 'all';
+      currentCategory = null;
+      currentTag = null;
+      render();
+    });
+
     document.getElementById('search-input').addEventListener('input', (e) => {
       searchQuery = e.target.value;
       if (searchRenderTimer) clearTimeout(searchRenderTimer);
@@ -1450,20 +1579,27 @@
     document.querySelectorAll('.nav-item').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.preventDefault();
-        document.querySelectorAll('.nav-item').forEach(b => {
-          b.classList.remove('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
-          b.classList.add('text-gray-600', 'dark:text-gray-400');
-        });
-        btn.classList.add('bg-blue-50', 'dark:bg-blue-900/35', 'text-blue-600', 'dark:text-blue-400', 'font-medium');
-        btn.classList.remove('text-gray-600', 'dark:text-gray-400');
         currentFilter = btn.dataset.filter;
-        currentCategory = null; currentTag = null;
+        currentCategory = null;
+        currentTag = null;
+        closeSidebar();
         render();
       });
     });
 
-    document.getElementById('toggle-sidebar').addEventListener('click', () => {
-      document.getElementById('sidebar').classList.toggle('hidden');
+    document.getElementById('toggle-sidebar').addEventListener('click', toggleSidebar);
+    sidebarBackdrop.addEventListener('click', closeSidebar);
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') closeSidebar();
+    });
+    window.addEventListener('resize', () => {
+      if (!window.matchMedia('(max-width: 1023px)').matches) {
+        sidebar.classList.remove('sidebar-open');
+        sidebarBackdrop.classList.remove('sidebar-backdrop-open');
+        document.getElementById('toggle-sidebar').setAttribute('aria-expanded', String(!sidebar.classList.contains('sidebar-collapsed')));
+      } else {
+        sidebar.classList.remove('sidebar-collapsed');
+      }
     });
 
     document.getElementById('retry-sync').addEventListener('click', () => {

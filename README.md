@@ -4,10 +4,10 @@ Personal notes application using Google Apps Script, Google Drive Markdown files
 
 ## Current package
 
-**v1.2.5 — Tahap 2.1: Frontend Performance**
+**v1.2.6 — Tahap 2.2: UX & Navigation**
 
 ### Components
-- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, bounded retry scheduling, and cached frontend rendering.
+- `Index.html`: frontend SPA with durable sync queue, offline reconciliation, explicit conflict resolution, bounded retry scheduling, cached frontend rendering, responsive sidebar navigation, active-view context, empty states, and persistent sync status.
 - `Code.gs`: Apps Script backend with Drive ownership checks, optimistic version checks, and retry idempotency receipts.
 
 ### Storage layout
@@ -37,12 +37,14 @@ Files directly under `storage` are also accepted as notes in category Umum for c
 - Backend idempotency receipts make retrying the same operation ID safe after a lost browser response. Receipts are retained for seven days.
 
 ## Installation
-See `INSTALL.md`. Run all five test guides after deployment:
+See `INSTALL.md`. Run the test guides after deployment:
 - `SYNC-QUEUE-TEST.md`
 - `OFFLINE-RECONCILIATION-TEST.md`
 - `BACKEND-SECURITY-TEST.md`
 - `CONFLICT-VERSION-TEST.md`
 - `SYNC-RECOVERY-TEST.md`
+- `PERFORMANCE-UX-TEST.md`
+- `UX-NAVIGATION-TEST.md`
 
 ## Important limitations
 - Version detection uses Drive modification timestamps, not a content hash or atomic Drive ETag precondition. Avoid direct manual edits to stored Markdown files while KeepFlow is in use.
