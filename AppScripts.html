@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.2 Temporary Inbox & Migration
+    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.3 Category Management
     let notes = [];
     let currentFilter = 'all';
     let activeSection = 'dashboard';
@@ -137,17 +137,31 @@
         .getCategories();
     }
 
+    function ensureCategoryManagementReady() {
+      if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) {
+        alert('Pengelolaan kategori memerlukan koneksi internet.');
+        return false;
+      }
+      if (!serverReady || cloudLoadInProgress || syncRunning) {
+        alert('Tunggu sampai data cloud selesai dimuat dan sinkronisasi tidak sedang berjalan.');
+        return false;
+      }
+      if (pendingOperations.length || pendingCategoryCreates.length) {
+        alert('Masih ada antrean sinkronisasi. Tunggu sampai semua perubahan tersinkron sebelum mengubah atau menghapus kategori.');
+        return false;
+      }
+      if (editorDraftDirty) {
+        alert('Simpan atau batalkan draft editor terlebih dahulu sebelum mengubah kategori.');
+        return false;
+      }
+      return true;
+    }
+
     function addCategory(categoryName) {
       const name = String(categoryName || '').replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
       if (!name) return;
       if (name.toLocaleLowerCase() === 'umum') {
-        // Transitional compatibility: legacy "Umum" notes are surfaced in Inbox
-        // until Phase 3.7.2 migrates their Drive storage representation.
-        currentCategory = null;
-        currentFilter = 'inbox';
-        currentTag = null;
-        activeSection = 'notes';
-        render();
+        alert('Nama "Umum" dicadangkan untuk kompatibilitas data lama. Gunakan Inbox untuk catatan tanpa kategori.');
         return;
       }
       const existing = categories.find(item => item.toLowerCase() === name.toLowerCase());
@@ -935,37 +949,63 @@
         event.stopPropagation();
         const category = deleteButton.dataset.category;
         if (!category || category.toLocaleLowerCase() === 'umum') return;
-        const count = notes.filter(note => normalizeNoteCategory(note.category) === category).length;
-        if (count > 0) {
-          alert(`Kategori "${category}" masih memiliki ${count} catatan. Hapus atau pindahkan catatan terlebih dahulu.`);
-          return;
-        }
-        if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) {
-          alert('Penghapusan kategori memerlukan koneksi internet. Silakan coba kembali saat online.');
-          return;
-        }
-        if (!confirm(`Hapus kategori kosong "${category}"? Tindakan ini memindahkan folder kategori ke Sampah Google Drive.`)) return;
+        if (!ensureCategoryManagementReady()) return;
+
+        const noteCount = notes.filter(note =>
+          normalizeNoteCategory(note.category).toLocaleLowerCase() === category.toLocaleLowerCase()
+        ).length;
+        const confirmed = confirm(
+          'Hapus kategori "' + category + '"?\n\n' +
+          (noteCount
+            ? noteCount + ' catatan (termasuk catatan arsip) akan dipindahkan ke Temporary Inbox.'
+            : 'Kategori ini tidak memiliki catatan.') +
+          '\n\nFile catatan tidak akan dihapus. ID, isi, dan metadata tetap dipertahankan. ' +
+          'File selain .md/.txt dan subfolder tidak akan dihapus; jika ditemukan, kategori mungkin tetap ada sampai dirapikan.\n\nLanjutkan?'
+        );
+        if (!confirmed) return;
+
         deleteButton.disabled = true;
+        deleteButton.classList.add('opacity-50');
         google.script.run
           .withSuccessHandler(response => {
-            if (!response || response.status !== 'success') {
+            if (!response || !['success', 'partial'].includes(response.status)) {
               alert((response && response.message) || 'Kategori gagal dihapus.');
               renderCategories();
               return;
             }
-            categories = categories.filter(item => item !== category);
-            pendingCategoryCreates = pendingCategoryCreates.filter(item => item !== category);
-            if (currentCategory === category) {
+
+            if (response.folderTrashed && currentCategory &&
+                currentCategory.toLocaleLowerCase() === category.toLocaleLowerCase()) {
               currentCategory = null;
               currentFilter = 'inbox';
+              currentTag = null;
             }
-            persistCategoryState();
-            reconcileCloudCategories(response.categories || []);
-            render();
+
+            loadInitialData();
+
+            const summary = [
+              response.status === 'success' ? 'Kategori berhasil dihapus.' : 'Penghapusan kategori belum sepenuhnya selesai.',
+              'Catatan dipindahkan ke Inbox: ' + (response.filesMoved || 0),
+              'Catatan yang sudah berada di Inbox: ' + (response.filesAlreadyInInbox || 0),
+              'File tersisa di folder kategori: ' + (response.remainingFiles || 0),
+              'Subfolder tersisa: ' + (response.remainingFolders || 0)
+            ];
+            if (response.skippedFiles && response.skippedFiles.length) {
+              summary.push('', 'File non-catatan yang tidak dipindahkan:', ...response.skippedFiles.slice(0, 8));
+            }
+            if (response.errors && response.errors.length) {
+              summary.push('', 'Kesalahan:', ...response.errors.slice(0, 5).map(item => item.file + ': ' + item.message));
+            }
+            alert(summary.join('\n'));
+            setSyncStatus(
+              response.status === 'success' ? 'Kategori dihapus; catatan dipindahkan ke Inbox' : 'Kategori diproses sebagian; periksa detail',
+              response.status === 'success' ? 'fa-inbox' : 'fa-triangle-exclamation',
+              response.status === 'success' ? 'text-green-500' : 'text-amber-500'
+            );
           })
           .withFailureHandler(error => {
             console.error('KeepFlow delete category error:', error);
-            alert('Kategori gagal dihapus. Periksa koneksi lalu coba kembali.');
+            alert('Penghapusan kategori gagal: ' + (error && error.message ? error.message : 'Kesalahan server.'));
             renderCategories();
           })
           .deleteCategoryFolder(category);
@@ -977,14 +1017,76 @@
         event.preventDefault();
         event.stopPropagation();
         const oldCat = editButton.dataset.oldCategory;
-        const newCat = prompt(`Ubah nama kategori "${oldCat}" menjadi:`, oldCat);
-        if (newCat && newCat.trim() && newCat.trim() !== oldCat) {
-          const formattedNewCat = newCat.trim();
-          notes.forEach(note => { if (normalizeNoteCategory(note.category) === oldCat) note.category = formattedNewCat; });
-          if (currentCategory === oldCat) currentCategory = formattedNewCat;
-          render();
-          syncToBackend();
+        if (!oldCat || oldCat.toLocaleLowerCase() === 'umum') return;
+
+        const newCat = prompt('Ubah nama kategori "' + oldCat + '" menjadi:', oldCat);
+        if (newCat == null) return;
+        const formattedNewCat = newCat.replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
+        if (!formattedNewCat) {
+          alert('Nama kategori tidak boleh kosong.');
+          return;
         }
+        if (formattedNewCat.toLocaleLowerCase() === 'umum') {
+          alert('Nama "Umum" dicadangkan untuk kompatibilitas data lama.');
+          return;
+        }
+        if (formattedNewCat === oldCat) return;
+        const duplicate = categories.find(item =>
+          item.toLocaleLowerCase() === formattedNewCat.toLocaleLowerCase() &&
+          item.toLocaleLowerCase() !== oldCat.toLocaleLowerCase()
+        );
+        if (duplicate) {
+          alert('Kategori "' + duplicate + '" sudah ada.');
+          return;
+        }
+        if (!ensureCategoryManagementReady()) return;
+
+        editButton.disabled = true;
+        google.script.run
+          .withSuccessHandler(response => {
+            if (!response || response.status !== 'success') {
+              alert((response && response.message) || 'Nama kategori gagal diubah.');
+              renderCategories();
+              return;
+            }
+
+            const renamed = response.category || formattedNewCat;
+            notes = notes.map(note => ({
+              ...note,
+              category: normalizeNoteCategory(note.category).toLocaleLowerCase() === oldCat.toLocaleLowerCase()
+                ? renamed
+                : normalizeNoteCategory(note.category)
+            }));
+            lastObservedNotes = lastObservedNotes.map(note => ({
+              ...note,
+              category: normalizeNoteCategory(note.category).toLocaleLowerCase() === oldCat.toLocaleLowerCase()
+                ? renamed
+                : normalizeNoteCategory(note.category)
+            }));
+            categories = categories.map(item =>
+              item.toLocaleLowerCase() === oldCat.toLocaleLowerCase() ? renamed : item
+            );
+            if (!categories.some(item => item.toLocaleLowerCase() === renamed.toLocaleLowerCase())) {
+              categories.push(renamed);
+            }
+            if (currentCategory && currentCategory.toLocaleLowerCase() === oldCat.toLocaleLowerCase()) {
+              currentCategory = renamed;
+            }
+            persistLocal();
+            reconcileCloudCategories(response.categories || categories);
+            render();
+            if (activeNoteId) {
+              const activeNote = notes.find(note => String(note.id) === String(activeNoteId));
+              if (activeNote && modalCategorySelect) modalCategorySelect.value = normalizeNoteCategory(activeNote.category);
+            }
+            setSyncStatus('Kategori berhasil diubah menjadi "' + renamed + '"', 'fa-folder', 'text-green-500');
+          })
+          .withFailureHandler(error => {
+            console.error('KeepFlow rename category error:', error);
+            alert('Nama kategori gagal diubah: ' + (error && error.message ? error.message : 'Kesalahan server.'));
+            renderCategories();
+          })
+          .renameCategoryFolder(oldCat, formattedNewCat);
         return;
       }
 
@@ -1488,10 +1590,8 @@
           </div>
           <div class="flex items-center space-x-2">
             <span class="text-xs text-gray-400">${categoryCounts.get(cat) || 0}</span>
-            <button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori" aria-label="Ubah kategori ${escapeHTML(cat)}"><i class="fa-solid fa-pen text-xs"></i></button>
-            ${(categoryCounts.get(cat) || 0) === 0
-              ? `<button data-category="${escapeHTML(cat)}" class="delete-category-btn text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1" title="Hapus Kategori Kosong" aria-label="Hapus kategori ${escapeHTML(cat)}"><i class="fa-solid fa-trash text-xs"></i></button>`
-              : `<span class="text-gray-300 p-1" title="Kategori masih memiliki catatan"><i class="fa-solid fa-lock text-xs"></i></span>`}
+            <button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori" aria-label="Ubah kategori ${escapeHTML(cat)}"><i class="fa-solid fa-pen text-xs"></i></button>
+            <button data-category="${escapeHTML(cat)}" class="delete-category-btn text-gray-400 hover:text-red-500 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition p-1" title="Hapus kategori dan pindahkan catatan ke Inbox" aria-label="Hapus kategori ${escapeHTML(cat)}"><i class="fa-solid fa-trash text-xs"></i></button>
           </div>
         </div>
       `).join('');
@@ -2034,9 +2134,9 @@
       }
       const count = legacyInboxMigrationStatus.noteCount;
       const confirmed = confirm(
-        'Migrasi Temporary Inbox\\n\\n' +
+        'Migrasi Temporary Inbox\n\n' +
         count + ' catatan dalam folder Umum akan dipindahkan ke root storage Google Drive.\n' +
-        'ID, nama file, isi, metadata, tag, pin, dan status arsip dipertahankan.\\n\\n' +
+        'ID, nama file, isi, metadata, tag, pin, dan status arsip dipertahankan.\n\n' +
         'Folder Umum hanya akan dibuang ke Sampah jika benar-benar kosong. File lain dan subfolder tidak akan diubah.\n\n' +
         'Pastikan file Backup ZIP sudah berhasil diunduh dan disimpan. Lanjutkan?'
       );

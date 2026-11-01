@@ -213,33 +213,63 @@ function migrateLegacyInbox() {
   }
 }
 
-/** Create an empty category folder. Safe to call repeatedly. */
+/**
+ * Find one category folder by case-insensitive name.
+ * This prevents categories such as "Studi Alkitab" and "studi alkitab"
+ * from being created as separate entries.
+ */
+function findCategoryFolderCaseInsensitive(storage, categoryName) {
+  const target = String(categoryName || '').trim().toLocaleLowerCase();
+  const folders = storage.getFolders();
+  let found = null;
+  while (folders.hasNext()) {
+    const folder = folders.next();
+    if (folder.isTrashed() || folder.getName().toLocaleLowerCase() !== target) continue;
+    if (found) {
+      throw new Error('Struktur kategori ambigu: ditemukan lebih dari satu folder dengan nama "' + categoryName + '" (abaikan huruf besar/kecil).');
+    }
+    found = folder;
+  }
+  return found;
+}
+
+/** Create a category folder. Repeated calls are case-insensitive and idempotent. */
 function createCategoryFolder(categoryName) {
   const rawCategory = String(categoryName == null ? '' : categoryName).trim();
   if (!rawCategory) {
     return { status: 'error', message: 'Nama kategori tidak boleh kosong.' };
   }
   const category = safeName(rawCategory, '');
-  if (category.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox dan tidak dapat dibuat sebagai kategori.' };
-  }
   if (!category || category.length > 120) {
     return { status: 'error', message: 'Nama kategori tidak valid (maksimal 120 karakter).' };
+  }
+  if (category.toLocaleLowerCase() === 'umum') {
+    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox dan tidak dapat dibuat sebagai kategori.' };
   }
 
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     const storage = getStorageFolder();
-    const folder = getOrCreateSubFolder(storage, category);
-    return { status: 'success', category: folder.getName(), categories: getCategories() };
+    const existing = findCategoryFolderCaseInsensitive(storage, category);
+    const folder = existing || storage.createFolder(category);
+    return {
+      status: 'success',
+      category: folder.getName(),
+      created: !existing,
+      categories: getCategories()
+    };
   } finally {
     lock.releaseLock();
   }
 }
 
-
-/** Delete a category folder only when it is truly empty. */
+/**
+ * Delete a category by moving its direct files to the Inbox root.
+ * No file is trashed or recreated. Nested folders are deliberately rejected
+ * so the operation never silently changes an unknown folder hierarchy.
+ * Safe to retry after a partial Drive parent update.
+ */
 function deleteCategoryFolder(categoryName) {
   const rawCategory = String(categoryName == null ? '' : categoryName).trim();
   if (!rawCategory) {
@@ -257,18 +287,159 @@ function deleteCategoryFolder(categoryName) {
   lock.waitLock(20000);
   try {
     const storage = getStorageFolder();
-    const folder = getUniqueFolderByName(storage, category);
+    const folder = findCategoryFolderCaseInsensitive(storage, category);
     if (!folder || folder.isTrashed()) {
       return { status: 'error', message: 'Kategori tidak ditemukan.' };
     }
 
-    // Check actual Drive contents, including archived notes and nested folders.
-    if (folder.getFiles().hasNext() || folder.getFolders().hasNext()) {
-      return { status: 'error', message: 'Kategori masih memiliki isi dan tidak dapat dihapus.' };
+    const childFolders = folder.getFolders();
+    if (childFolders.hasNext()) {
+      return {
+        status: 'error',
+        message: 'Kategori memiliki subfolder. Pindahkan atau rapikan subfolder tersebut terlebih dahulu; tidak ada data yang diubah.'
+      };
     }
 
-    folder.setTrashed(true);
-    return { status: 'success', category: category, categories: getCategories() };
+    const iterator = folder.getFiles();
+    const files = [];
+    while (iterator.hasNext()) {
+      const file = iterator.next();
+      if (!file.isTrashed()) files.push(file);
+    }
+
+    let filesMoved = 0;
+    let filesAlreadyInInbox = 0;
+    const errors = [];
+    const skippedFiles = [];
+
+    files.forEach(file => {
+      if (!/\.(md|txt)$/i.test(file.getName())) {
+        skippedFiles.push(file.getName());
+        return;
+      }
+      try {
+        const parentsIterator = file.getParents();
+        const parentIds = [];
+        const parentFolders = [];
+        while (parentsIterator.hasNext()) {
+          const parent = parentsIterator.next();
+          parentIds.push(parent.getId());
+          parentFolders.push(parent);
+        }
+
+        const hasStorage = parentIds.includes(storage.getId());
+        const hasCategory = parentIds.includes(folder.getId());
+        const unexpected = parentFolders.filter(parent =>
+          parent.getId() !== storage.getId() &&
+          parent.getId() !== folder.getId()
+        );
+
+        if (unexpected.length || (!hasStorage && !hasCategory)) {
+          throw new Error('Parent file tidak sesuai struktur kategori KeepFlow.');
+        }
+
+        if (hasStorage && hasCategory) {
+          folder.removeFile(file);
+          filesAlreadyInInbox++;
+          return;
+        }
+
+        if (hasStorage && !hasCategory) {
+          filesAlreadyInInbox++;
+          return;
+        }
+
+        // Add destination before removing source. If execution stops between
+        // these calls, the next run recognizes both parents and completes it.
+        storage.addFile(file);
+        folder.removeFile(file);
+        filesMoved++;
+      } catch (error) {
+        errors.push({
+          file: file.getName(),
+          message: String(error && error.message || error)
+        });
+      }
+    });
+
+    const remainingFilesIterator = folder.getFiles();
+    const remainingFileNames = [];
+    while (remainingFilesIterator.hasNext()) remainingFileNames.push(remainingFilesIterator.next().getName());
+    const hasRemainingFiles = remainingFileNames.length > 0;
+    const remainingFolders = folder.getFolders();
+    const hasRemainingFolders = remainingFolders.hasNext();
+
+    let folderTrashed = false;
+    if (!hasRemainingFiles && !hasRemainingFolders && !errors.length) {
+      try {
+        folder.setTrashed(true);
+        folderTrashed = true;
+      } catch (error) {
+        errors.push({
+          file: folder.getName(),
+          message: 'Catatan sudah dipindahkan, tetapi folder gagal dipindahkan ke Sampah: ' +
+            String(error && error.message || error)
+        });
+      }
+    }
+
+    const categories = getCategories();
+    return {
+      status: errors.length || hasRemainingFiles || hasRemainingFolders ? 'partial' : 'success',
+      category: category,
+      filesMoved: filesMoved,
+      filesAlreadyInInbox: filesAlreadyInInbox,
+      notesMoved: filesMoved,
+      folderTrashed: folderTrashed,
+      remainingFiles: remainingFileNames.length,
+      remainingFolders: hasRemainingFolders ? 1 : 0,
+      skippedFiles: skippedFiles, remainingFileNames: remainingFileNames,
+      categories: categories,
+      errors: errors
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Rename a category folder without rewriting any note file. */
+function renameCategoryFolder(oldName, newName) {
+  const oldRaw = String(oldName == null ? '' : oldName).trim();
+  const newRaw = String(newName == null ? '' : newName).trim();
+  const oldCategory = safeName(oldRaw, '');
+  const newCategory = safeName(newRaw, '');
+
+  if (!oldCategory || !newCategory || oldCategory.length > 120 || newCategory.length > 120) {
+    return { status: 'error', message: 'Nama kategori tidak valid (maksimal 120 karakter).' };
+  }
+  if (oldCategory.toLocaleLowerCase() === 'umum') {
+    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox dan tidak dapat diubah namanya.' };
+  }
+  if (newCategory.toLocaleLowerCase() === 'umum') {
+    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox.' };
+  }
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const storage = getStorageFolder();
+    const sourceFolder = findCategoryFolderCaseInsensitive(storage, oldCategory);
+    if (!sourceFolder) {
+      return { status: 'error', message: 'Folder kategori lama tidak ditemukan.' };
+    }
+
+    const targetFolder = findCategoryFolderCaseInsensitive(storage, newCategory);
+    if (targetFolder && targetFolder.getId() !== sourceFolder.getId()) {
+      return { status: 'error', message: 'Nama kategori tujuan sudah digunakan.' };
+    }
+
+    if (sourceFolder.getName() !== newCategory) sourceFolder.setName(newCategory);
+    return {
+      status: 'success',
+      oldCategory: oldCategory,
+      category: sourceFolder.getName(),
+      categories: getCategories()
+    };
   } finally {
     lock.releaseLock();
   }
@@ -465,31 +636,3 @@ function deleteNoteFromFile(fileId) {
   return deleteNote(fileId);
 }
 
-function renameCategoryFolder(oldName, newName) {
-  const oldCategory = safeName(oldName, '');
-  const newCategory = safeName(newName, '');
-  if (!oldCategory || !newCategory || oldCategory.length > 120 || newCategory.length > 120) {
-    return { status: 'error', message: 'Nama kategori tidak valid.' };
-  }
-  if (oldCategory.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox dan tidak dapat diubah namanya.' };
-  }
-  if (newCategory.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox.' };
-  }
-
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    const storage = getStorageFolder();
-    const sourceFolder = getUniqueFolderByName(storage, oldCategory);
-    if (!sourceFolder) return { status: 'error', message: 'Folder kategori lama tidak ditemukan.' };
-    if (getUniqueFolderByName(storage, newCategory)) {
-      return { status: 'error', message: 'Nama kategori tujuan sudah digunakan.' };
-    }
-    sourceFolder.setName(newCategory);
-    return { status: 'success' };
-  } finally {
-    lock.releaseLock();
-  }
-}

@@ -6,7 +6,7 @@ This document distinguishes implemented code from work that still requires deplo
 
 - Stable public release: **v1.3.5**
 - Current development snapshot: **v1.3.6-dev**
-- Current workstream: **Phase 3.7.2 — Temporary Inbox & Legacy Data Migration**
+- Current workstream: **Phase 3.7.3 — Category Management**
 
 ## Product direction
 
@@ -20,7 +20,7 @@ Hadi KeepFlow is evolving into a Personal Knowledge Management (PKM) system whil
 - Assigning a category moves the note into `storage/<category>/`.
 - Removing a category assignment returns the note to `storage/`.
 - Archived notes are excluded from the active Inbox count.
-- Deleting a category in a future phase must not delete its notes; they must return to Inbox.
+- Deleting a category moves supported note files back to Inbox without deleting or recreating them.
 - The legacy `Umum` category is reserved for compatibility and cannot be created as a normal category.
 
 ## Phase 3.7 — Workspace & Category Architecture
@@ -50,11 +50,17 @@ Hadi KeepFlow is evolving into a Personal Knowledge Management (PKM) system whil
 
 ### 3.7.3 — Category Management
 
-**Planned.**
+**Source implementation: complete; live Google Drive verification pending.**
 
-- Create, rename, reorder, and delete categories.
-- Deleting a category must move its notes to Inbox, never delete those notes.
-- Category ordering and icon management may be introduced without changing note identity.
+- Create categories with case-insensitive duplicate prevention.
+- Rename categories by renaming the Drive folder; note files and IDs are not rewritten.
+- Delete categories by moving direct `.md` and `.txt` note files to the storage root / Temporary Inbox.
+- Preserve note file IDs, names, contents, and embedded metadata during category deletion.
+- Support retry after a partial Drive parent update.
+- Do not trash a category folder if unsupported files, subfolders, or file-operation errors remain.
+- Reserve `Umum` for legacy compatibility; it cannot be created, renamed to, or deleted through normal category management.
+- Require online state, a loaded cloud snapshot, and an empty sync queue before rename/delete actions.
+- Reject case-insensitive duplicate category names.
 
 ### 3.7.4 — Integration & Reliability
 

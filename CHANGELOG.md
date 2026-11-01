@@ -42,3 +42,15 @@ See `CHANGELOG-v1.3.5-phase-3.6.md`.
 - Empty legacy `Umum` folders are moved to Drive Trash; unrelated files and nested folders are left untouched.
 - Backup ZIP now stores Inbox notes at the archive root and omits `Umum` as a category.
 - Restore remains compatible with older ZIP backups containing `Umum/` paths.
+
+
+## v1.3.6-dev — Phase 3.7.3: Category Management
+
+- Added case-insensitive category folder lookup and duplicate prevention.
+- Category rename now uses a dedicated backend operation and renames the Drive folder without rewriting note files.
+- Category deletion now moves `.md` and `.txt` notes into the Temporary Inbox instead of requiring an empty category.
+- Preserved Drive file IDs, filenames, note contents, and embedded metadata during category deletion.
+- Added retry-safe handling for files temporarily attached to both a category folder and the storage root.
+- Kept categories containing unsupported files or nested folders in place; no unrelated content is trashed.
+- Updated the category UI to expose rename and delete actions for categories containing notes.
+- Structural category changes require online state and a clean synchronization queue.

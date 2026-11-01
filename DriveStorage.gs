@@ -30,8 +30,10 @@ function getStorageFolder() {
 }
 
 /**
- * Return the file's single parent only if it is inside KeepFlow storage.
- * The accepted layout is storage/<category>/<file> or storage/<file> (Inbox).
+ * Validate that a file belongs to KeepFlow storage.
+ * Normal files have one parent (storage/ or a direct category folder).
+ * A narrowly scoped two-parent state is accepted only to recover an interrupted
+ * move between a category folder and storage/ (Temporary Inbox).
  */
 function assertFileBelongsToStorage(file, storage) {
   if (!file || file.isTrashed()) {
@@ -45,20 +47,23 @@ function assertFileBelongsToStorage(file, storage) {
     throw new Error('Akses ditolak: file tidak berada di folder penyimpanan KeepFlow.');
   }
 
-  const storageParents = parentFolders.filter(parent => parent.getId() === storage.getId());
-  const legacyParents = parentFolders.filter(parent => {
-    if (parent.getId() === storage.getId() || parent.isTrashed()) return false;
-    if (parent.getName().toLocaleLowerCase() !== 'umum') return false;
+  const isDirectStorageChild = parent => {
+    if (!parent || parent.isTrashed() || parent.getId() === storage.getId()) return false;
     const grandparents = parent.getParents();
     if (!grandparents.hasNext()) return false;
     const grandparent = grandparents.next();
     return !grandparents.hasNext() && grandparent.getId() === storage.getId();
-  });
+  };
 
-  // Recovery allowance: an interrupted legacy migration may temporarily leave
-  // the note attached to both storage/ and storage/Umum/. No other multi-parent
-  // arrangement is accepted.
-  if (storageParents.length === 1 && legacyParents.length === 1 && parentFolders.length === 2) {
+  const storageParents = parentFolders.filter(parent => parent.getId() === storage.getId());
+  const directCategoryParents = parentFolders.filter(isDirectStorageChild);
+
+  // Recovery allowance: category deletion or legacy Inbox migration may be
+  // interrupted after adding the storage parent but before removing the
+  // previous direct child folder. Accept exactly that two-parent state.
+  if (storageParents.length === 1 &&
+      directCategoryParents.length === 1 &&
+      parentFolders.length === 2) {
     return storage;
   }
 
@@ -73,12 +78,7 @@ function assertFileBelongsToStorage(file, storage) {
     throw new Error('Akses ditolak: folder kategori sudah berada di sampah.');
   }
 
-  const grandParents = parent.getParents();
-  if (!grandParents.hasNext()) {
-    throw new Error('Akses ditolak: file bukan bagian dari penyimpanan KeepFlow.');
-  }
-  const grandParent = grandParents.next();
-  if (grandParents.hasNext() || grandParent.getId() !== storage.getId()) {
+  if (!isDirectStorageChild(parent)) {
     throw new Error('Akses ditolak: file bukan bagian dari penyimpanan KeepFlow.');
   }
 

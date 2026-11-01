@@ -4,8 +4,8 @@
 
 Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Drive. The browser provides the interface, local drafts, preferences, search, and an offline synchronization queue.
 
-> **Stable release: v1.3.5. Current development snapshot: v1.3.6-dev — Phase 3.7.2 (Temporary Inbox & Legacy Data Migration).**
-> The development snapshot stores uncategorized notes directly in the storage root, treats `Umum` as a legacy Inbox source, and includes a backup-gated, retryable migration action.
+> **Stable release: v1.3.5. Current development snapshot: v1.3.6-dev — Phase 3.7.3 (Category Management).**
+> The development snapshot includes Temporary Inbox storage, a backup-gated legacy `Umum` migration, and category create/rename/delete operations that preserve note files.
 
 ## Project status
 
@@ -24,6 +24,7 @@ Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Dri
 | Inbox navigation/view | Implemented; Inbox is the empty-category view |
 | Uncategorized storage | Implemented; uncategorized Markdown files are stored directly under `storage/` |
 | Legacy `Umum` migration | Implemented as an explicit, backup-gated, retryable operation; deployer must run and verify it |
+| Category management | Create, rename, and delete; deletion moves supported notes to Inbox |
 | Note linking and backlinks | Planned |
 | Multi-user collaboration | Not supported |
 | AI / vector search | Not included |
@@ -84,6 +85,10 @@ All `.gs` files share the Apps Script global namespace. Keep public server funct
 - The migration does not rename or overwrite note files. It trashes a legacy `Umum` folder only when it is empty; unrelated files and nested folders are left untouched and reported.
 - The migration action is enabled only after a Backup ZIP has been generated in the current browser session. Save the downloaded backup somewhere safe before confirming migration.
 - Old backup ZIP files using `Umum/<note>.md` remain importable; those notes are normalized to the Inbox.
+- Renaming a category renames its Drive folder; note files are not rewritten.
+- Deleting a category moves direct `.md` and `.txt` files to the storage root. File IDs, names, contents, and embedded metadata are preserved.
+- A category folder is not trashed if unsupported files, nested folders, or file-operation errors remain. Those items must be reviewed manually.
+- Rename and delete require an online connection, loaded cloud data, and an empty sync queue to avoid racing pending note writes.
 - LocalStorage is used for local note cache, pending sync operations, editor draft recovery, search history, category state, and user preferences.
 - Do not clear LocalStorage during upgrades unless a migration guide explicitly instructs you to do so.
 
@@ -142,6 +147,8 @@ The repository contains manual test guides for:
 - Workspace navigation (**[WORKSPACE-NAVIGATION-TEST.md](WORKSPACE-NAVIGATION-TEST.md)**)
 - Phase 3.7.1 implementation notes (**[PHASE-3.7.1-IMPLEMENTATION.md](PHASE-3.7.1-IMPLEMENTATION.md)**)
 - Temporary Inbox and legacy migration (**[TEMPORARY-INBOX-MIGRATION-TEST.md](TEMPORARY-INBOX-MIGRATION-TEST.md)**)
+- Category management (**[CATEGORY-MANAGEMENT-TEST.md](CATEGORY-MANAGEMENT-TEST.md)**)
+- Phase 3.7.3 implementation notes (**[PHASE-3.7.3-IMPLEMENTATION.md](PHASE-3.7.3-IMPLEMENTATION.md)**)
 - Phase 3.7.2 implementation notes (**[PHASE-3.7.2-IMPLEMENTATION.md](PHASE-3.7.2-IMPLEMENTATION.md)**)
 
 Start with **[TEST-CHECKLIST.md](TEST-CHECKLIST.md)** and then run the relevant phase-specific test documents.
@@ -150,7 +157,7 @@ Static JavaScript syntax checks can catch parsing errors, but they do not prove 
 
 ## Roadmap
 
-See **[ROADMAP.md](ROADMAP.md)**. Phases 3.7.1 and 3.7.2 are implemented in this development snapshot. The deployer must create a fresh backup, run the legacy migration from the Data & Backup section, and complete the manual migration checklist before treating the data migration as verified.
+See **[ROADMAP.md](ROADMAP.md)**. Phases 3.7.1, 3.7.2, and 3.7.3 are implemented in this development snapshot. The deployer must create a fresh backup, run the legacy migration from the Data & Backup section, and complete the manual migration checklist before treating the data migration as verified.
 
 ## Contributing
 

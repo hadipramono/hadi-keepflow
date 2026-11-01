@@ -57,3 +57,24 @@ This work did not deploy the project to Apps Script and did not access the owner
 - Full security correctness.
 
 Run `TEMPORARY-INBOX-MIGRATION-TEST.md` in a test deployment and save a fresh backup before migration.
+
+
+## Phase 3.7.3 — Category Management
+
+### Source changes
+
+- Added case-insensitive category folder lookup and duplicate prevention.
+- Added dedicated category rename behavior; Drive folder is renamed without rewriting note files.
+- Category deletion moves `.md` and `.txt` files into Temporary Inbox, preserving file IDs, names, content, and embedded metadata.
+- Unsupported files and nested folders are not trashed. The category folder remains until all contents are handled.
+- Added retry handling for the exact two-parent state created by an interrupted Drive move.
+- Frontend rename/delete operations are blocked while the cloud is unavailable, sync is active, pending note operations/category creates exist, or an editor draft is dirty.
+
+### Validation
+
+- Node syntax checks passed for all backend `.gs` files and frontend JavaScript.
+- Mocked Drive test passed for category create idempotency, rename preservation, note migration to Inbox, unsupported PDF retention, retry, two-parent ownership validation, and nested-folder protection.
+- `Index.html` contains 117 unique IDs with no duplicates; all 109 literal `getElementById()` references resolve.
+- Local Markdown link scan found no broken relative links.
+
+Live Apps Script and Google Drive behavior remains unverified; use `CATEGORY-MANAGEMENT-TEST.md` in a dedicated test deployment.
