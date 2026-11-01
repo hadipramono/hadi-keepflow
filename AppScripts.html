@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.1 Workspace Navigation
+    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.2 Temporary Inbox & Migration
     let notes = [];
     let currentFilter = 'all';
     let activeSection = 'dashboard';
@@ -32,15 +32,31 @@
 
     const LOCAL_KEY = 'hadi_keepflow_offline_notes_v1';
     const CATEGORY_STATE_KEY = 'hadi_keepflow_categories_v1';
-    const DEFAULT_CATEGORIES = ['Umum'];
+    const DEFAULT_CATEGORIES = [];
     let categories = [...DEFAULT_CATEGORIES];
     let pendingCategoryCreates = [];
+
+    function normalizeNoteCategory(value) {
+      const category = String(value == null ? '' : value).trim();
+      return !category || category.toLocaleLowerCase() === 'umum' ? '' : category;
+    }
+
+    function normalizeNoteRecord(note) {
+      if (!note || typeof note !== 'object') return note;
+      return { ...note, category: normalizeNoteCategory(note.category) };
+    }
 
     function loadCategoryState() {
       try {
         const state = JSON.parse(localStorage.getItem(CATEGORY_STATE_KEY) || '{}');
-        categories = [...new Set([...DEFAULT_CATEGORIES, ...(Array.isArray(state.categories) ? state.categories : [])])];
-        pendingCategoryCreates = Array.isArray(state.pendingCreates) ? state.pendingCreates.filter(name => typeof name === 'string') : [];
+        categories = [...new Set([
+          ...DEFAULT_CATEGORIES,
+          ...(Array.isArray(state.categories) ? state.categories : [])
+            .filter(name => typeof name === 'string' && name.trim() && name.toLocaleLowerCase() !== 'umum')
+        ])];
+        pendingCategoryCreates = Array.isArray(state.pendingCreates)
+          ? state.pendingCreates.filter(name => typeof name === 'string' && name.trim() && name.toLocaleLowerCase() !== 'umum')
+          : [];
       } catch (error) {
         categories = [...DEFAULT_CATEGORIES];
         pendingCategoryCreates = [];
@@ -49,7 +65,7 @@
 
     function pruneLegacyDefaultCategoriesFromLocalState() {
       const legacyDefaults = new Set(['Pekerjaan', 'Pribadi']);
-      const noteCategories = new Set(notes.map(note => String(note.category || 'Umum').trim()));
+      const noteCategories = new Set(notes.map(note => normalizeNoteCategory(note.category)).filter(Boolean));
       categories = categories.filter(category =>
         !legacyDefaults.has(category) || noteCategories.has(category) || pendingCategoryCreates.includes(category)
       );
@@ -66,17 +82,17 @@
 
     function mergeCategories(names) {
       if (!Array.isArray(names)) return;
-      categories = [...new Set([...DEFAULT_CATEGORIES, ...categories, ...names.map(name => String(name).trim()).filter(Boolean)])];
+      categories = [...new Set([...DEFAULT_CATEGORIES, ...categories, ...names.map(name => String(name).trim()).filter(name => name && name.toLocaleLowerCase() !== 'umum')])];
       persistCategoryState();
       renderCategories();
     }
 
     function reconcileCloudCategories(names) {
       if (!Array.isArray(names)) return;
-      const noteCategories = notes.map(note => String(note.category || 'Umum').trim()).filter(Boolean);
+      const noteCategories = notes.map(note => normalizeNoteCategory(note.category)).filter(Boolean);
       categories = [...new Set([
         ...DEFAULT_CATEGORIES,
-        ...names.map(name => String(name).trim()).filter(Boolean),
+        ...names.map(name => String(name).trim()).filter(name => name && name.toLocaleLowerCase() !== 'umum'),
         ...noteCategories,
         ...pendingCategoryCreates
       ])];
@@ -112,6 +128,7 @@
         .withSuccessHandler(names => {
           reconcileCloudCategories(names);
           syncPendingCategoryCreates();
+          refreshLegacyInboxMigrationStatus();
         })
         .withFailureHandler(error => {
           console.warn('KeepFlow category load failed:', error);
@@ -691,7 +708,7 @@
 
       try {
         const localData = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
-        notes = Array.isArray(localData) ? localData : [];
+        notes = Array.isArray(localData) ? localData.map(normalizeNoteRecord) : [];
       } catch (e) {
         notes = [];
       }
@@ -742,8 +759,8 @@
             .filter(op => op.type === 'delete')
             .map(op => String(op.id)));
           const localPending = notes.filter(note => queuedSaves.has(String(note.id)));
-          const merged = new Map(serverData.map(note => [String(note.id), note]));
-          localPending.forEach(note => merged.set(String(note.id), note));
+          const merged = new Map(serverData.map(note => [String(note.id), normalizeNoteRecord(note)]));
+          localPending.forEach(note => merged.set(String(note.id), normalizeNoteRecord(note)));
 
           notes = [...merged.values()].filter(note => !queuedDeletes.has(String(note.id)));
 
@@ -918,7 +935,7 @@
         event.stopPropagation();
         const category = deleteButton.dataset.category;
         if (!category || category.toLocaleLowerCase() === 'umum') return;
-        const count = notes.filter(note => (note.category || 'Umum') === category).length;
+        const count = notes.filter(note => normalizeNoteCategory(note.category) === category).length;
         if (count > 0) {
           alert(`Kategori "${category}" masih memiliki ${count} catatan. Hapus atau pindahkan catatan terlebih dahulu.`);
           return;
@@ -943,7 +960,7 @@
               currentFilter = 'inbox';
             }
             persistCategoryState();
-            reconcileCloudCategories(response.categories || ['Umum']);
+            reconcileCloudCategories(response.categories || []);
             render();
           })
           .withFailureHandler(error => {
@@ -963,7 +980,7 @@
         const newCat = prompt(`Ubah nama kategori "${oldCat}" menjadi:`, oldCat);
         if (newCat && newCat.trim() && newCat.trim() !== oldCat) {
           const formattedNewCat = newCat.trim();
-          notes.forEach(note => { if ((note.category || 'Umum') === oldCat) note.category = formattedNewCat; });
+          notes.forEach(note => { if (normalizeNoteCategory(note.category) === oldCat) note.category = formattedNewCat; });
           if (currentCategory === oldCat) currentCategory = formattedNewCat;
           render();
           syncToBackend();
@@ -1062,7 +1079,7 @@
     function noteSearchHaystack(note) {
       const title = String(note.title || '').toLocaleLowerCase();
       const content = getSearchableText(note).lower;
-      const category = String(note.category || 'Umum').toLocaleLowerCase();
+      const category = normalizeNoteCategory(note.category).toLocaleLowerCase();
       const tags = (Array.isArray(note.tags) ? note.tags : []).join(' ').toLocaleLowerCase();
       return [title, content, category, tags].join(' ');
     }
@@ -1211,7 +1228,7 @@
         .map(category => [String(category), 0]));
       active.forEach(note => {
         if (isInboxNote(note)) return;
-        const category = String(note.category).trim();
+        const category = normalizeNoteCategory(note.category);
         if (category) categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
       });
       const categoryRows = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
@@ -1228,7 +1245,7 @@
         if (currentFilter === 'inbox') return isInboxNote(note) && !isArchivedNote(note);
         if (currentFilter === 'pinned') return note.isPinned && !isArchivedNote(note);
         if (currentFilter === 'archive') return isArchivedNote(note);
-        if (currentCategory) return (note.category || 'Umum') === currentCategory && !isArchivedNote(note);
+        if (currentCategory) return normalizeNoteCategory(note.category) === currentCategory && !isArchivedNote(note);
         if (currentTag) return note.tags && note.tags.includes(currentTag) && !isArchivedNote(note);
         return !isArchivedNote(note);
       }).sort(compareNotes);
@@ -1374,13 +1391,12 @@
       const availableCategories = [...new Set([
         ...DEFAULT_CATEGORIES,
         ...categories,
-        ...notes.map(note => String(note.category || 'Umum').trim()).filter(Boolean)
-      ])];
-      categorySelect.innerHTML = '<option value="">Pindah kategori...</option>' +
+        ...notes.map(note => normalizeNoteCategory(note.category)).filter(Boolean)
+      ])].filter(category => category.toLocaleLowerCase() !== 'umum');
+      categorySelect.innerHTML = '<option value="">Pilih tujuan...</option>' +
+        '<option value="__inbox__">📥 Inbox</option>' +
         availableCategories.map(category =>
-          '<option value="' + escapeHTML(category) + '">' +
-          (String(category).toLocaleLowerCase() === 'umum' ? 'Inbox' : escapeHTML(category)) +
-          '</option>'
+          '<option value="' + escapeHTML(category) + '">📁 ' + escapeHTML(category) + '</option>'
         ).join('');
       categorySelect.value = [...categorySelect.options].some(option => option.value === currentValue) ? currentValue : '';
       const selectedNotes = notes.filter(note => selectedNoteIds.has(String(note.id)));
@@ -1424,16 +1440,14 @@
         (typeof value === 'string' && ['true', '1'].includes(value.trim().toLowerCase()));
     }
 
-    // Phase 3.7.1 presents legacy "Umum" notes through the Inbox navigation.
-    // Their Drive folders and metadata are intentionally unchanged until Phase 3.7.2.
+    // Inbox is represented by an empty category. "Umum" is accepted only as
+    // a compatibility value for stale local drafts and older queued payloads.
     function isInboxNote(note) {
-      const category = String(note && note.category != null ? note.category : 'Umum').trim();
-      return !category || category.toLocaleLowerCase() === 'umum';
+      return normalizeNoteCategory(note && note.category) === '';
     }
 
     function getCategoryDisplayName(category) {
-      const value = String(category || 'Umum').trim();
-      return value.toLocaleLowerCase() === 'umum' ? 'Inbox' : value;
+      return normalizeNoteCategory(category) || 'Inbox';
     }
 
     function renderInboxCount() {
@@ -1459,7 +1473,7 @@
       // not as a regular category. Other categories retain their existing data.
       notes.forEach(note => {
         if (isInboxNote(note)) return;
-        const category = String(note.category).trim();
+        const category = normalizeNoteCategory(note.category);
         if (!category) return;
         activeCatsSet.add(category);
         categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
@@ -1482,12 +1496,11 @@
         </div>
       `).join('');
 
-      // Keep the legacy storage value "Umum" as an Inbox-labelled editor option
-      // until the data migration in Phase 3.7.2 is implemented.
-      const editorCategories = ['Umum', ...activeCats.filter(cat => String(cat).toLocaleLowerCase() !== 'umum')];
-      modalCategorySelect.innerHTML = editorCategories.map(cat => `
-        <option value="${escapeHTML(cat)}">${cat.toLocaleLowerCase() === 'umum' ? '📥 Inbox' : '📁 ' + escapeHTML(cat)}</option>
-      `).join('');
+      const editorCategories = activeCats.filter(cat => String(cat).toLocaleLowerCase() !== 'umum');
+      modalCategorySelect.innerHTML = '<option value="">📥 Inbox (tanpa kategori)</option>' +
+        editorCategories.map(cat => `
+          <option value="${escapeHTML(cat)}">📁 ${escapeHTML(cat)}</option>
+        `).join('');
     }
 
     function renderTags() {
@@ -1579,7 +1592,7 @@
         noteId: activeNoteId ? String(activeNoteId) : '__new__',
         title: document.getElementById('modal-title-input').value,
         content: document.getElementById('editor-content-editable').innerHTML,
-        category: modalCategorySelect.value || 'Umum',
+        category: normalizeNoteCategory(modalCategorySelect.value),
         tagsText: document.getElementById('modal-tags-input').value,
         baselineUpdatedAt: editorBaseline && editorBaseline.updatedAt || '',
         savedAt: new Date().toISOString()
@@ -1758,14 +1771,14 @@
       if (currentNote) {
         modalTitle.value = currentNote.title || '';
         modalContentEditable.innerHTML = sanitizeEditorHTML(currentNote.content || '');
-        modalCategorySelect.value = currentNote.category || 'Umum';
+        modalCategorySelect.value = normalizeNoteCategory(currentNote.category);
         modalTags.value = (currentNote.tags || []).join(', ');
         metaCreated.textContent = `Dibuat: ${formatDate(currentNote.createdAt)}`;
         metaUpdated.textContent = `Diperbarui: ${formatDate(currentNote.updatedAt)}`;
       } else {
         modalTitle.value = '';
         modalContentEditable.innerHTML = '';
-        modalCategorySelect.value = currentCategory || 'Umum';
+        modalCategorySelect.value = normalizeNoteCategory(currentCategory);
         modalTags.value = '';
         const nowFormatted = formatDate(new Date().toISOString());
         metaCreated.textContent = `Dibuat: ${nowFormatted}`;
@@ -1784,7 +1797,7 @@
         if (confirm(prompt)) {
           modalTitle.value = String(draft.title || '');
           modalContentEditable.innerHTML = sanitizeEditorHTML(draft.content || '');
-          modalCategorySelect.value = String(draft.category || 'Umum');
+          modalCategorySelect.value = normalizeNoteCategory(draft.category);
           modalTags.value = String(draft.tagsText || '');
           setEditorDraftStatus('Draft lokal dipulihkan — periksa sebelum menyimpan.', 'text-amber-600 dark:text-amber-400');
         } else {
@@ -1806,7 +1819,7 @@
     function saveActiveNote() {
       const title = document.getElementById('modal-title-input').value.trim();
       const content = sanitizeEditorHTML(document.getElementById('editor-content-editable').innerHTML.trim());
-      const category = String(modalCategorySelect.value || 'Umum').trim().slice(0, 120) || 'Umum';
+      const category = normalizeNoteCategory(modalCategorySelect.value).slice(0, 120);
       const tags = normalizeTags(document.getElementById('modal-tags-input').value);
 
       if (content.length > 500000) {
@@ -1969,6 +1982,99 @@
 
     document.getElementById('data-progress-close').addEventListener('click', hideDataProgress);
 
+    let legacyInboxMigrationStatus = null;
+    let migrationBackupReady = false;
+
+    function renderLegacyInboxMigrationStatus(status) {
+      legacyInboxMigrationStatus = status;
+      const button = document.getElementById('migrate-legacy-inbox-btn');
+      const detail = document.getElementById('legacy-inbox-migration-detail');
+      if (!button || !detail) return;
+      const count = Number(status && status.noteCount) || 0;
+      const show = count > 0 || Number(status && status.folderCount) > 0 ||
+        Number(status && status.otherFileCount) > 0 || Number(status && status.nestedFolderCount) > 0;
+      button.classList.toggle('hidden', !show);
+      button.disabled = !migrationBackupReady || count === 0 || !navigator.onLine;
+      button.textContent = count > 0
+        ? 'Migrasi ' + count + ' catatan Umum ke Inbox'
+        : 'Periksa sisa folder Umum';
+      detail.textContent = count > 0
+        ? count + ' catatan lama masih berada di folder Umum. Buat backup ZIP sebelum migrasi.'
+        : (Number(status && status.otherFileCount) > 0 || Number(status && status.nestedFolderCount) > 0
+          ? 'Tidak ada catatan Markdown yang tersisa, tetapi file lain atau subfolder tetap ada dan tidak akan diubah.'
+          : (show ? 'Folder Umum kosong dan tidak lagi berisi catatan.' : ''));
+    }
+
+    async function refreshLegacyInboxMigrationStatus() {
+      if (!navigator.onLine || !serverReady) return;
+      try {
+        const status = await callKeepFlowServer('getLegacyInboxMigrationStatus');
+        if (status && status.status === 'success') renderLegacyInboxMigrationStatus(status);
+      } catch (error) {
+        console.warn('KeepFlow legacy Inbox status error:', error);
+      }
+    }
+
+    async function runLegacyInboxMigration() {
+      const button = document.getElementById('migrate-legacy-inbox-btn');
+      if (!migrationBackupReady) {
+        alert('Buat dan unduh Backup ZIP terbaru terlebih dahulu. Tombol migrasi akan aktif setelah backup berhasil dibuat pada sesi ini.');
+        return;
+      }
+      try {
+        // Re-check that no sync queue or editor draft changed after the backup.
+        ensureBackupReady();
+      } catch (error) {
+        alert(error.message);
+        return;
+      }
+      if (!legacyInboxMigrationStatus || !legacyInboxMigrationStatus.noteCount) {
+        await refreshLegacyInboxMigrationStatus();
+        return;
+      }
+      const count = legacyInboxMigrationStatus.noteCount;
+      const confirmed = confirm(
+        'Migrasi Temporary Inbox\\n\\n' +
+        count + ' catatan dalam folder Umum akan dipindahkan ke root storage Google Drive.\n' +
+        'ID, nama file, isi, metadata, tag, pin, dan status arsip dipertahankan.\\n\\n' +
+        'Folder Umum hanya akan dibuang ke Sampah jika benar-benar kosong. File lain dan subfolder tidak akan diubah.\n\n' +
+        'Pastikan file Backup ZIP sudah berhasil diunduh dan disimpan. Lanjutkan?'
+      );
+      if (!confirmed) return;
+
+      button.disabled = true;
+      button.textContent = 'Memigrasikan...';
+      try {
+        const result = await callKeepFlowServer('migrateLegacyInbox');
+        if (!result || !['success', 'partial'].includes(result.status)) {
+          throw new Error((result && result.message) || 'Migrasi tidak berhasil.');
+        }
+        await loadInitialData();
+        const status = await callKeepFlowServer('getLegacyInboxMigrationStatus');
+        renderLegacyInboxMigrationStatus(status);
+        const summary = [
+          'Migrasi selesai.',
+          'Catatan dipindahkan: ' + (result.migrated || 0),
+          'Sudah berada di root: ' + (result.alreadyInStorage || 0),
+          'Folder Umum dipindahkan ke Sampah: ' + (result.foldersTrashed || 0),
+          'Catatan tersisa: ' + (result.remainingNoteCount || 0),
+          'File non-catatan dilewati: ' + (result.otherFileCount || 0),
+          'Subfolder tersisa: ' + (result.nestedFolderCount || 0)
+        ];
+        if (result.errors && result.errors.length) {
+          summary.push('', 'Kesalahan: ' + result.errors.length, ...result.errors.slice(0, 5).map(item => item.file + ': ' + item.message));
+        }
+        alert(summary.join('\n'));
+      } catch (error) {
+        console.error('KeepFlow legacy Inbox migration error:', error);
+        alert('Migrasi gagal atau terhenti: ' + error.message + '\n\nCatatan yang sudah berhasil dipindahkan tetap aman. Periksa status lalu jalankan migrasi kembali.');
+        await refreshLegacyInboxMigrationStatus();
+      } finally {
+        if (button) button.disabled = !migrationBackupReady ||
+          !legacyInboxMigrationStatus || !legacyInboxMigrationStatus.noteCount;
+      }
+    }
+
     async function createKeepFlowBackup() {
       const button = document.getElementById('backup-zip-btn');
       try {
@@ -1993,19 +2099,28 @@
           format: KEEPFLOW_BACKUP_FORMAT,
           schemaVersion: KEEPFLOW_BACKUP_SCHEMA,
           application: 'Hadi KeepFlow',
-          applicationVersion: '1.3.5',
+          applicationVersion: '1.3.6-dev',
           createdAt: snapshot.generatedAt || new Date().toISOString(),
           noteCount: cloudNotes.length,
-          categories: [...new Set(['Umum', ...cloudCategories])],
+          categories: [...new Set(cloudCategories.filter(category => String(category).toLocaleLowerCase() !== 'umum'))],
           notes: []
         };
 
+        const usedArchivePaths = new Set();
         for (let index = 0; index < cloudNotes.length; index++) {
           const note = cloudNotes[index];
-          const category = safeBackupSegment(note.category || 'Umum', 'Umum').slice(0, 120);
+          const category = normalizeNoteCategory(note.category);
           const title = safeBackupSegment(note.title || ('Catatan ' + (index + 1)), 'Catatan Tanpa Judul');
-          const filename = title + '.md';
-          const path = category + '/' + filename;
+          const baseFilename = title + '.md';
+          let filename = baseFilename;
+          let suffix = 2;
+          let path = category ? category + '/' + filename : filename;
+          while (usedArchivePaths.has(path.toLocaleLowerCase())) {
+            filename = title + ' (' + suffix + ').md';
+            path = category ? category + '/' + filename : filename;
+            suffix++;
+          }
+          usedArchivePaths.add(path.toLocaleLowerCase());
           zip.file(path, makeBackupNoteFile(note));
           manifest.notes.push({
             path,
@@ -2020,7 +2135,7 @@
           if (index % 20 === 0) await yieldToBrowser();
         }
 
-        manifest.categories.forEach(category => zip.folder(safeBackupSegment(category, 'Umum')));
+        manifest.categories.forEach(category => { if (category && category.toLocaleLowerCase() !== 'umum') zip.folder(safeBackupSegment(category, 'Kategori')); });
         zip.file('manifest.json', JSON.stringify(manifest, null, 2));
         updateDataProgress('Mengompres arsip ZIP', 'Menyiapkan file untuk diunduh...', 62, false);
         await yieldToBrowser();
@@ -2039,6 +2154,8 @@
         });
 
         downloadBlob(blob, 'hadi_keepflow_backup_' + new Date().toISOString().slice(0, 10) + '.zip');
+        migrationBackupReady = true;
+        if (legacyInboxMigrationStatus) renderLegacyInboxMigrationStatus(legacyInboxMigrationStatus);
         finishDataProgress('Backup selesai', cloudNotes.length + ' catatan dan ' + manifest.categories.length + ' kategori berhasil di-backup.', false);
         setSyncStatus('Backup ZIP berhasil dibuat', 'fa-cloud-arrow-down', 'text-green-500');
         await new Promise(resolve => setTimeout(resolve, 900));
@@ -2056,7 +2173,7 @@
       }
     }
 
-    function parseBackupNoteFile(rawText, path) {
+    function parseBackupNoteFile(rawText, path, manifestNote) {
       let content = String(rawText || '');
       let metadata = {};
       if (content.startsWith('---JSON---')) {
@@ -2071,9 +2188,11 @@
         }
       }
       const segments = path.split('/').filter(Boolean);
-      const category = segments.length > 1 ? segments[segments.length - 2] : 'Umum';
+      const categoryFromPath = segments.length > 1 ? segments[segments.length - 2] : '';
+      const pathCategory = categoryFromPath.toLocaleLowerCase() === 'umum' ? '' : categoryFromPath;
+      const category = normalizeNoteCategory(manifestNote && manifestNote.category != null ? manifestNote.category : pathCategory);
       const filename = segments[segments.length - 1] || '';
-      const title = filename.replace(/\.(md|txt)$/i, '');
+      const title = String(manifestNote && manifestNote.title || filename.replace(/\.(md|txt)$/i, ''));
       if (!title || title.length > 180 || category.length > 120 || content.length > MAX_IMPORT_NOTE_BYTES) {
         throw new Error('Judul, kategori, atau isi catatan tidak memenuhi batas ukuran pada ' + path);
       }
@@ -2082,7 +2201,7 @@
         id: 'import_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10),
         title,
         content,
-        category: category || 'Umum',
+        category: category,
         isPinned: metadata.isPinned === true || metadata.isPinned === 1 || String(metadata.isPinned).toLowerCase() === 'true',
         isArchived: metadata.isArchived === true || metadata.isArchived === 1 || String(metadata.isArchived).toLowerCase() === 'true',
         tags,
@@ -2091,7 +2210,7 @@
     }
 
     function importDuplicateKey(note) {
-      return (String(note.category || 'Umum').trim().toLocaleLowerCase() + '\u0000' +
+      return (normalizeNoteCategory(note.category).toLocaleLowerCase() + '\u0000' +
         String(note.title || '').trim().toLocaleLowerCase());
     }
 
@@ -2133,6 +2252,12 @@
 
       const imported = [];
       const invalid = [];
+      const manifestNotesByPath = new Map();
+      if (manifest && Array.isArray(manifest.notes)) {
+        manifest.notes.forEach(item => {
+          if (item && typeof item.path === 'string') manifestNotesByPath.set(item.path, item);
+        });
+      }
       let totalBytes = 0;
       let processedDeclaredBytes = 0;
       const totalDeclaredBytes = Math.max(1, declaredExpandedBytes);
@@ -2159,7 +2284,7 @@
           });
           totalBytes += new Blob([raw]).size;
           if (totalBytes > MAX_IMPORT_ZIP_BYTES) throw new Error('Total data hasil ekstraksi melebihi 25 MB.');
-          imported.push(parseBackupNoteFile(raw, entry.name));
+          imported.push(parseBackupNoteFile(raw, entry.name, manifestNotesByPath.get(entry.name) || null));
         } catch (error) {
           invalid.push({ path: entry.name, message: error.message });
         }
@@ -2172,12 +2297,12 @@
       const importedCategories = new Set();
       if (manifest && Array.isArray(manifest.categories)) {
         manifest.categories.forEach(name => {
-          if (typeof name === 'string' && name.trim() && name.length <= 120) importedCategories.add(name.trim());
+          if (typeof name === 'string' && name.trim() && name.length <= 120 && name.trim().toLocaleLowerCase() !== 'umum') importedCategories.add(name.trim());
         });
         if (importedCategories.size > 500) throw new Error('Backup mencantumkan terlalu banyak kategori (maksimal 500).');
       }
-      imported.forEach(note => importedCategories.add(note.category));
-      importedCategories.add('Umum');
+      imported.forEach(note => { if (note.category) importedCategories.add(note.category); });
+
 
       const currentByKey = new Map();
       notes.forEach(note => {
@@ -2252,7 +2377,7 @@
         }
 
         let categoriesCreated = 0;
-        const categoriesToCreate = preview.categories.filter(category => category.toLocaleLowerCase() !== 'umum');
+        const categoriesToCreate = preview.categories.filter(category => category && category.toLocaleLowerCase() !== 'umum');
         for (let i = 0; i < categoriesToCreate.length; i++) {
           const category = categoriesToCreate[i];
           updateDataProgress(
@@ -2320,6 +2445,8 @@
     }
 
     document.getElementById('backup-zip-btn').addEventListener('click', createKeepFlowBackup);
+    const migrateLegacyInboxButton = document.getElementById('migrate-legacy-inbox-btn');
+    if (migrateLegacyInboxButton) migrateLegacyInboxButton.addEventListener('click', runLegacyInboxMigration);
     document.getElementById('restore-zip-file').addEventListener('change', event => {
       const file = event.target.files && event.target.files[0];
       if (file) restoreKeepFlowZip(file);
@@ -2390,10 +2517,11 @@
     });
 
     document.getElementById('bulk-move-category').addEventListener('click', () => {
-      const category = document.getElementById('bulk-category-select').value;
-      if (!category) { alert('Pilih kategori tujuan terlebih dahulu.'); return; }
+      const selectedTarget = document.getElementById('bulk-category-select').value;
+      if (!selectedTarget) { alert('Pilih kategori tujuan terlebih dahulu.'); return; }
+      const category = selectedTarget === '__inbox__' ? '' : selectedTarget;
       const count = applyBulkNoteUpdate(note => ({ ...note, category }));
-      if (count) setSyncStatus(count + ' catatan dipindahkan ke ' + category, 'fa-folder', 'text-green-500');
+      if (count) setSyncStatus(count + ' catatan dipindahkan ke ' + (category || 'Inbox'), category ? 'fa-folder' : 'fa-inbox', 'text-green-500');
     });
 
     document.getElementById('bulk-add-tags').addEventListener('click', () => {
@@ -2445,7 +2573,7 @@
       const changed = activeNoteId
         ? current && (title !== (current.title || '') || content !== (current.content || '') ||
             document.getElementById('modal-tags-input').value !== (current.tags || []).join(', ') ||
-            modalCategorySelect.value !== (current.category || 'Umum'))
+            normalizeNoteCategory(modalCategorySelect.value) !== normalizeNoteCategory(current.category))
         : Boolean(title || content);
       if (changed && !confirm('Perubahan belum disimpan. Tutup editor dan buang perubahan?')) return;
       if (changed) clearEditorDraft();

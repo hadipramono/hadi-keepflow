@@ -8,10 +8,10 @@ This file summarizes notable project releases. Detailed phase notes remain in th
 - Added Inbox navigation with an active uncategorized/legacy `Umum` note count.
 - Added Inbox-specific filtering and empty-state messaging.
 - Displayed legacy `Umum` notes as Inbox in note cards and category selectors.
-- Kept the existing Drive folder layout and stored note metadata unchanged; migration is deferred to Phase 3.7.2.
+- Kept the existing Drive folder layout and stored note metadata unchanged at the 3.7.1 stage; migration was deferred to Phase 3.7.2.
 - Kept Dashboard, All Notes, Pinned, Categories, Tags, Archive, and backup/restore entry points.
 
-This is a development snapshot, not a published stable release. Full Temporary Inbox storage semantics are not included yet.
+At the Phase 3.7.1 implementation stage, this was a transitional Inbox presentation. Phase 3.7.2 below completes the uncategorized storage and migration work.
 
 ## Repository preparation (documentation and security defaults)
 
@@ -30,3 +30,15 @@ These repository-readiness changes do not implement Phase 3.7 and do not change 
 - Preserved the existing note body format and synchronization architecture.
 
 See `CHANGELOG-v1.3.5-phase-3.6.md`.
+
+
+## v1.3.6-dev — Phase 3.7.2: Temporary Inbox & Legacy Data Migration
+
+- Uncategorized notes now use an empty category and are stored directly under the Drive storage root.
+- Legacy `Umum` folders are treated as Inbox sources until migrated.
+- Added a read-only legacy migration status API and a retryable migration API.
+- Added a migration action that requires a Backup ZIP generated in the current browser session.
+- Migration preserves Drive file IDs, filenames, contents, and note metadata.
+- Empty legacy `Umum` folders are moved to Drive Trash; unrelated files and nested folders are left untouched.
+- Backup ZIP now stores Inbox notes at the archive root and omits `Umum` as a category.
+- Restore remains compatible with older ZIP backups containing `Umum/` paths.

@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.3.5 backend module.
+ * Hadi KeepFlow v1.3.6-dev backend module.
  * Apps Script .gs files share one global namespace.
  */
 
@@ -9,20 +9,26 @@ function getNotes() {
   try {
     const storage = getStorageFolder();
     const result = [];
-    collectFolderNotes(storage, 'Umum', result);
+    collectFolderNotes(storage, '', result);
 
     const folders = storage.getFolders();
     while (folders.hasNext()) {
       const folder = folders.next();
-      collectFolderNotes(folder, folder.getName(), result);
+      if (folder.isTrashed()) continue;
+      // A legacy Umum folder remains an Inbox source until migration finishes.
+      const category = folder.getName().toLocaleLowerCase() === 'umum' ? '' : folder.getName();
+      collectFolderNotes(folder, category, result);
     }
 
-    return result.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    // A partially completed Drive move can briefly expose the same file through
+    // both parents. De-duplicate by immutable Drive file ID.
+    const unique = new Map();
+    result.forEach(note => unique.set(String(note.id), note));
+    return Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   } finally {
     lock.releaseLock();
   }
 }
-
 /**
  * Return notes and category names from one locked Drive snapshot for backup.
  * This prevents category and note lists from being read at different moments.
@@ -33,28 +39,28 @@ function getBackupSnapshot() {
   try {
     const storage = getStorageFolder();
     const result = [];
-    collectFolderNotes(storage, 'Umum', result);
+    collectFolderNotes(storage, '', result);
 
-    const categories = new Set(['Umum']);
+    const categories = new Set();
     const folders = storage.getFolders();
     while (folders.hasNext()) {
       const folder = folders.next();
       if (folder.isTrashed()) continue;
-      categories.add(folder.getName());
-      collectFolderNotes(folder, folder.getName(), result);
+      const folderName = folder.getName();
+      const category = folderName.toLocaleLowerCase() === 'umum' ? '' : folderName;
+      if (category) categories.add(category);
+      collectFolderNotes(folder, category, result);
     }
 
-    result.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    const categoryList = Array.from(categories).sort((a, b) => {
-      if (a === 'Umum') return -1;
-      if (b === 'Umum') return 1;
-      return a.localeCompare(b, 'id');
-    });
+    const unique = new Map();
+    result.forEach(note => unique.set(String(note.id), note));
+    const notes = Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    const categoryList = Array.from(categories).sort((a, b) => a.localeCompare(b, 'id'));
     return {
       generatedAt: new Date().toISOString(),
-      notes: result,
+      notes: notes,
       categories: categoryList,
-      noteCount: result.length
+      noteCount: notes.length
     };
   } finally {
     lock.releaseLock();
@@ -62,22 +68,149 @@ function getBackupSnapshot() {
 }
 
 /**
- * Return category folders stored directly under KeepFlow storage.
- * Empty categories are included even when they do not contain notes yet.
+ * Return real category folders only. Inbox is represented by notes stored
+ * directly in storage, not by a synthetic "Umum" category.
  */
 function getCategories() {
   const storage = getStorageFolder();
-  const names = new Set(['Umum']);
+  const names = new Set();
   const folders = storage.getFolders();
   while (folders.hasNext()) {
     const folder = folders.next();
-    if (!folder.isTrashed()) names.add(folder.getName());
+    const name = folder.getName();
+    if (!folder.isTrashed() && name.toLocaleLowerCase() !== 'umum') names.add(name);
   }
-  return Array.from(names).sort((a, b) => {
-    if (a === 'Umum') return -1;
-    if (b === 'Umum') return 1;
-    return a.localeCompare(b, 'id');
-  });
+  return Array.from(names).sort((a, b) => a.localeCompare(b, 'id'));
+}
+
+/**
+ * Read-only status for the one-time legacy Inbox migration.
+ * Only Markdown/text notes are moved; unrelated files and nested folders are
+ * reported and left untouched.
+ */
+function getLegacyInboxMigrationStatus() {
+  const storage = getStorageFolder();
+  const folders = storage.getFolders();
+  let folderCount = 0;
+  let noteCount = 0;
+  let otherFileCount = 0;
+  let nestedFolderCount = 0;
+  while (folders.hasNext()) {
+    const folder = folders.next();
+    if (folder.isTrashed() || folder.getName().toLocaleLowerCase() !== 'umum') continue;
+    folderCount++;
+    const files = folder.getFiles();
+    while (files.hasNext()) {
+      const file = files.next();
+      if (file.isTrashed()) continue;
+      if (/\.(md|txt)$/i.test(file.getName())) noteCount++;
+      else otherFileCount++;
+    }
+    const children = folder.getFolders();
+    while (children.hasNext()) {
+      if (!children.next().isTrashed()) nestedFolderCount++;
+    }
+  }
+  return {
+    status: 'success',
+    folderCount: folderCount,
+    noteCount: noteCount,
+    otherFileCount: otherFileCount,
+    nestedFolderCount: nestedFolderCount,
+    migrationRequired: noteCount > 0
+  };
+}
+
+/**
+ * Move legacy Umum note files into the storage root without changing file IDs,
+ * names, contents, or metadata. Safe to retry after partial completion.
+ */
+function migrateLegacyInbox() {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const storage = getStorageFolder();
+    const folders = storage.getFolders();
+    const legacyFolders = [];
+    while (folders.hasNext()) {
+      const folder = folders.next();
+      if (!folder.isTrashed() && folder.getName().toLocaleLowerCase() === 'umum') {
+        legacyFolders.push(folder);
+      }
+    }
+
+    let migrated = 0;
+    let skipped = 0;
+    let alreadyInStorage = 0;
+    const errors = [];
+    let foldersTrashed = 0;
+    let foldersRemaining = 0;
+
+    legacyFolders.forEach(folder => {
+      const fileIterator = folder.getFiles();
+      const legacyFiles = [];
+      while (fileIterator.hasNext()) legacyFiles.push(fileIterator.next());
+      legacyFiles.forEach(file => {
+        if (file.isTrashed()) return;
+        if (!/\.(md|txt)$/i.test(file.getName())) {
+          skipped++;
+          return;
+        }
+        try {
+          const parents = file.getParents();
+          const parentIds = [];
+          while (parents.hasNext()) parentIds.push(parents.next().getId());
+          const hasStorage = parentIds.includes(storage.getId());
+          const hasLegacyParent = parentIds.includes(folder.getId());
+          const unexpectedParents = parentIds.filter(id => id !== storage.getId() && id !== folder.getId());
+          if (unexpectedParents.length || !hasLegacyParent) {
+            if (hasStorage && !hasLegacyParent && !unexpectedParents.length) {
+              alreadyInStorage++;
+              return;
+            }
+            throw new Error('Parent Drive file tidak sesuai struktur KeepFlow.');
+          }
+
+          // Add the destination first. If execution stops before removing the
+          // legacy parent, a retry recognizes both parents and completes it.
+          if (!hasStorage) storage.addFile(file);
+          folder.removeFile(file);
+          migrated++;
+        } catch (error) {
+          errors.push({ file: file.getName(), message: String(error && error.message || error) });
+        }
+      });
+
+      // Remove only empty legacy folders. Never trash unrelated content.
+      if (!folder.getFiles().hasNext() && !folder.getFolders().hasNext()) {
+        try {
+          folder.setTrashed(true);
+          foldersTrashed++;
+        } catch (error) {
+          foldersRemaining++;
+          errors.push({ file: folder.getName(), message: 'Gagal memindahkan folder kosong ke Sampah: ' + String(error && error.message || error) });
+        }
+      } else {
+        foldersRemaining++;
+      }
+    });
+
+    const remaining = getLegacyInboxMigrationStatus();
+    return {
+      status: errors.length || remaining.noteCount > 0 ? 'partial' : 'success',
+      migrated: migrated,
+      alreadyInStorage: alreadyInStorage,
+      skipped: skipped,
+      foldersTrashed: foldersTrashed,
+      foldersRemaining: foldersRemaining,
+      remainingNoteCount: remaining.noteCount,
+      otherFileCount: remaining.otherFileCount,
+      nestedFolderCount: remaining.nestedFolderCount,
+      errors: errors
+    };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 /** Create an empty category folder. Safe to call repeatedly. */
@@ -88,7 +221,7 @@ function createCategoryFolder(categoryName) {
   }
   const category = safeName(rawCategory, '');
   if (category.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Umum adalah kategori default dan tidak perlu dibuat.' };
+    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox dan tidak dapat dibuat sebagai kategori.' };
   }
   if (!category || category.length > 120) {
     return { status: 'error', message: 'Nama kategori tidak valid (maksimal 120 karakter).' };
@@ -117,7 +250,7 @@ function deleteCategoryFolder(categoryName) {
     return { status: 'error', message: 'Nama kategori tidak valid.' };
   }
   if (category.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Kategori Umum tidak dapat dihapus.' };
+    return { status: 'error', message: 'Folder Umum adalah sumber migrasi Inbox dan tidak dapat dihapus melalui pengelolaan kategori.' };
   }
 
   const lock = LockService.getScriptLock();
@@ -160,7 +293,11 @@ function validateNotePayload(note) {
   }
 
   const title = safeName(note.title, 'Catatan Tanpa Judul');
-  const category = safeName(note.category, 'Umum');
+  const rawCategory = note.category == null ? '' : String(note.category).trim();
+  // Legacy v1.3.5 payloads used "Umum" for uncategorized notes.
+  const category = !rawCategory || rawCategory.toLocaleLowerCase() === 'umum'
+    ? ''
+    : safeName(rawCategory, '');
   if (title.length > 180) throw new Error('Judul catatan terlalu panjang (maksimal 180 karakter).');
   if (category.length > 120) throw new Error('Nama kategori terlalu panjang (maksimal 120 karakter).');
 
@@ -214,12 +351,12 @@ function saveNote(note, operationId) {
           status: 'conflict',
           reason: expectedVersion ? 'version_mismatch' : 'version_missing',
           message: 'Catatan telah berubah di cloud atau versi dasar tidak tersedia.',
-          currentNote: parseNoteFile(file, currentParent.getId() === storage.getId() ? 'Umum' : currentParent.getName())
+          currentNote: parseNoteFile(file, currentParent.getId() === storage.getId() || currentParent.getName().toLocaleLowerCase() === 'umum' ? '' : currentParent.getName())
         };
       }
     }
 
-    const folder = getOrCreateSubFolder(storage, validated.category);
+    const folder = validated.category ? getOrCreateSubFolder(storage, validated.category) : storage;
     const fileName = buildUniqueFileName(folder, validated.title, file ? file.getId() : null);
     const now = new Date().toISOString();
     const metadata = {
@@ -296,7 +433,7 @@ function deleteNote(fileId, expectedUpdatedAt, operationId) {
         status: 'conflict',
         reason: expectedVersion ? 'version_mismatch' : 'version_missing',
         message: 'Catatan telah berubah di cloud atau versi dasar tidak tersedia.',
-        currentNote: parseNoteFile(file, parent.getId() === storage.getId() ? 'Umum' : parent.getName())
+        currentNote: parseNoteFile(file, parent.getId() === storage.getId() || parent.getName().toLocaleLowerCase() === 'umum' ? '' : parent.getName())
       };
     }
     file.setTrashed(true);
@@ -335,10 +472,10 @@ function renameCategoryFolder(oldName, newName) {
     return { status: 'error', message: 'Nama kategori tidak valid.' };
   }
   if (oldCategory.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Kategori Umum tidak dapat diubah namanya.' };
+    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox dan tidak dapat diubah namanya.' };
   }
   if (newCategory.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Nama Umum dicadangkan sebagai kategori default.' };
+    return { status: 'error', message: 'Nama Umum dicadangkan untuk kompatibilitas Inbox.' };
   }
 
   const lock = LockService.getScriptLock();

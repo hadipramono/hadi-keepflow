@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.3.5 backend module.
+ * Hadi KeepFlow v1.3.6-dev backend module.
  * Apps Script .gs files share one global namespace.
  */
 
@@ -31,7 +31,7 @@ function getStorageFolder() {
 
 /**
  * Return the file's single parent only if it is inside KeepFlow storage.
- * The accepted layout is storage/<category>/<file> or storage/<file> (Umum).
+ * The accepted layout is storage/<category>/<file> or storage/<file> (Inbox).
  */
 function assertFileBelongsToStorage(file, storage) {
   if (!file || file.isTrashed()) {
@@ -39,15 +39,34 @@ function assertFileBelongsToStorage(file, storage) {
   }
 
   const parents = file.getParents();
-  if (!parents.hasNext()) {
+  const parentFolders = [];
+  while (parents.hasNext()) parentFolders.push(parents.next());
+  if (!parentFolders.length) {
     throw new Error('Akses ditolak: file tidak berada di folder penyimpanan KeepFlow.');
   }
 
-  const parent = parents.next();
-  if (parents.hasNext()) {
-    throw new Error('Akses ditolak: file memiliki lebih dari satu parent Drive.');
+  const storageParents = parentFolders.filter(parent => parent.getId() === storage.getId());
+  const legacyParents = parentFolders.filter(parent => {
+    if (parent.getId() === storage.getId() || parent.isTrashed()) return false;
+    if (parent.getName().toLocaleLowerCase() !== 'umum') return false;
+    const grandparents = parent.getParents();
+    if (!grandparents.hasNext()) return false;
+    const grandparent = grandparents.next();
+    return !grandparents.hasNext() && grandparent.getId() === storage.getId();
+  });
+
+  // Recovery allowance: an interrupted legacy migration may temporarily leave
+  // the note attached to both storage/ and storage/Umum/. No other multi-parent
+  // arrangement is accepted.
+  if (storageParents.length === 1 && legacyParents.length === 1 && parentFolders.length === 2) {
+    return storage;
   }
 
+  if (parentFolders.length !== 1) {
+    throw new Error('Akses ditolak: file memiliki parent Drive yang tidak sesuai struktur KeepFlow.');
+  }
+
+  const parent = parentFolders[0];
   if (parent.getId() === storage.getId()) return parent;
 
   if (parent.isTrashed()) {
@@ -97,7 +116,7 @@ function parseNoteFile(file, categoryName) {
     id: file.getId(),
     title: fileName.replace(/\.(md|txt)$/i, ''),
     content: body,
-    category: categoryName || 'Umum',
+    category: categoryName || '',
     isPinned: toBoolean(meta.isPinned),
     isArchived: toBoolean(meta.isArchived),
     tags: Array.isArray(meta.tags) ? meta.tags.filter(t => typeof t === 'string') : [],

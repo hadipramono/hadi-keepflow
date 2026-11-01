@@ -1,59 +1,83 @@
 # Hadi KeepFlow Roadmap
 
-This document distinguishes implemented functionality from planned work. A roadmap item is not a feature commitment until its implementation is merged and tested.
+This document distinguishes implemented code from work that still requires deployment-level verification. A feature marked implemented in source is not considered live-verified until it has been tested in the deployer's Apps Script and Google Drive environment.
 
-## Stable release: v1.3.5
+## Release baseline
 
-Current development snapshot: v1.3.6-dev.
+- Stable public release: **v1.3.5**
+- Current development snapshot: **v1.3.6-dev**
+- Current workstream: **Phase 3.7.2 — Temporary Inbox & Legacy Data Migration**
 
-Phase 3.6 — Productivity Features:
-- Reusable note templates.
-- Interactive checklists.
-- Checklist progress display.
-- Existing Google Drive and LocalStorage synchronization architecture retained.
+## Product direction
 
-## In progress: Phase 3.7 — Workspace & Category Architecture
+Hadi KeepFlow is evolving into a Personal Knowledge Management (PKM) system while retaining its lightweight Google Apps Script, Google Drive, Markdown, and LocalStorage architecture.
 
-**Stable release: v1.3.5. Development snapshot: v1.3.6-dev.**
+### Agreed Temporary Inbox behavior
 
-### Product decision: Temporary Inbox
+- Inbox is a view for active notes without a category, not a permanent category.
+- New notes can be saved without selecting a category.
+- Uncategorized notes are stored directly in `storage/`.
+- Assigning a category moves the note into `storage/<category>/`.
+- Removing a category assignment returns the note to `storage/`.
+- Archived notes are excluded from the active Inbox count.
+- Deleting a category in a future phase must not delete its notes; they must return to Inbox.
+- The legacy `Umum` category is reserved for compatibility and cannot be created as a normal category.
 
-Inbox is a view/state for active notes that have not yet been assigned to a category. It is not a permanent category and does not require a dedicated Google Drive folder.
+## Phase 3.7 — Workspace & Category Architecture
 
-Expected behavior:
-- New notes may be saved without selecting a category.
-- Active notes without a category appear in Inbox.
-- Assigning a category removes the note from Inbox.
-- Removing a category assignment returns the active note to Inbox.
-- Archived notes do not appear in the active Inbox.
-- Deleting a category must not delete its notes; affected notes should be safely returned to Inbox.
-- The Inbox count must reflect active uncategorized notes.
+### 3.7.1 — Workspace Navigation
 
-### Implementation workstreams
+**Source implementation: complete.**
 
-1. **3.7.1 — Workspace Navigation**
-   - **Implemented in this development snapshot:** Dashboard, Inbox, All Notes, Pinned, Categories, Tags, Archive, and Data & Backup navigation.
-   - Inbox count and Inbox-specific empty state.
-   - Legacy `Umum` notes are presented in Inbox without changing Drive files or stored metadata.
-   - Navigation views remain separate from Drive folder structure.
-2. **3.7.2 — Temporary Inbox**
-   - Explicit uncategorized state.
-   - Inbox count, quick assignment, bulk assignment, and archive actions.
-3. **3.7.3 — Category Management**
-   - Create, rename, reorder, and delete categories.
-   - Safe handling of notes when a category is deleted.
-4. **3.7.4 — Integration & Reliability**
-   - Search and dashboard integration.
-   - Offline queue and conflict handling.
-   - Backup/restore compatibility and regression testing.
+- Dashboard, Inbox, All Notes, Pinned, Categories, Tags, Archive, and Data & Backup navigation.
+- Inbox count and Inbox-specific empty state.
+- Navigation views are independent from Drive folder structure.
 
-### Compatibility and migration decision
+### 3.7.2 — Temporary Inbox & Legacy Data Migration
 
-The project owner approved converting all legacy `Umum` notes into uncategorized Inbox notes in Phase 3.7.2. Until that migration is implemented:
-- v1.3.6-dev Phase 3.7.1 displays legacy `Umum` notes through the Inbox view.
-- The underlying Drive folder and metadata remain unchanged.
-- Other categories, note IDs, content, and metadata are untouched.
-- Do not describe the full uncategorized data model as implemented yet.
+**Source implementation: complete; live migration must be run and verified by the deployer.**
+
+- Empty category represents Inbox in frontend and backend.
+- New uncategorized notes are saved directly under the Drive storage root.
+- `getCategories()` returns actual category folders and excludes `Umum`.
+- Older `Umum` folder notes remain readable as Inbox until migrated.
+- Added read-only migration status and retryable migration endpoint.
+- Migration moves `.md` and `.txt` notes without changing file IDs, names, content, or note metadata.
+- Empty legacy `Umum` folders are moved to Drive Trash.
+- Non-note files and nested folders are left untouched and reported.
+- Backup ZIP stores Inbox notes at archive root and imports older `Umum/` backup paths as Inbox.
+- Migration action is gated by a successful Backup ZIP generation in the current browser session.
+
+### 3.7.3 — Category Management
+
+**Planned.**
+
+- Create, rename, reorder, and delete categories.
+- Deleting a category must move its notes to Inbox, never delete those notes.
+- Category ordering and icon management may be introduced without changing note identity.
+
+### 3.7.4 — Integration & Reliability
+
+**Planned.**
+
+- Search and dashboard integration.
+- Offline queue and conflict handling.
+- Backup/restore compatibility.
+- Regression testing across migration, category assignment, and archive behavior.
+
+## Migration safety notes
+
+The migration is explicit, not automatic. Before running it:
+
+1. Deploy the v1.3.6-dev source to a test deployment first.
+2. Wait for cloud data to finish loading and pending sync operations to settle.
+3. Generate and save a fresh Backup ZIP.
+4. Run the migration from **Data & Backup**.
+5. Review the migration result and remaining-folder counts.
+6. Verify Inbox, categories, note contents, tags, pinned state, archive state, and backup/restore.
+7. Keep the backup until verification is complete.
+
+A partial migration is retryable. The migration does not delete note files. A legacy folder containing unrelated files or nested folders is not trashed.
 
 ## Later planned phases
 

@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.3.5 backend module.
+ * Hadi KeepFlow v1.3.6-dev backend module.
  * Apps Script .gs files share one global namespace.
  */
 
@@ -72,7 +72,7 @@ function replayOperationReceipt(receipt, expectedType, storage) {
   }
   const parent = assertFileBelongsToStorage(file, storage);
   const currentVersion = file.getLastUpdated().toISOString();
-  const currentNote = parseNoteFile(file, parent.getId() === storage.getId() ? 'Umum' : parent.getName());
+  const currentNote = parseNoteFile(file, parent.getId() === storage.getId() || parent.getName().toLocaleLowerCase() === 'umum' ? '' : parent.getName());
   // If the file changed after the original operation, do not let a replay
   // acknowledge newer cloud content as though it were the original write.
   if (receipt.updatedAt && receipt.updatedAt !== currentVersion) {
