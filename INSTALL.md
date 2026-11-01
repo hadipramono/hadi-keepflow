@@ -2,7 +2,7 @@
 
 Panduan ini ditujukan untuk pengguna yang ingin membuat **instance pribadi** Hadi KeepFlow dari source code repository. Setiap pengguna sebaiknya membuat Apps Script project sendiri dan menyimpan catatan di Google Drive miliknya sendiri.
 
-> Source package saat ini adalah **v1.3.5**. Temporary Inbox Phase 3.7 belum termasuk dalam paket ini.
+> Source package ini adalah **v1.3.6 (GitHub pre-release)** dan mencakup Phase 3.7.1–3.7.4. Karena pengujian live Apps Script/Google Drive belum dikonfirmasi, deploy dan validasi terlebih dahulu pada project serta folder Drive khusus testing.
 
 ## 1. Prasyarat
 
@@ -61,15 +61,22 @@ Jika ingin orang lain menggunakan Hadi KeepFlow, bagikan source repository dan m
 
 ## 5. Upgrade instance yang sudah ada
 
-Untuk upgrade dari v1.3.4 ke v1.3.5, ganti hanya file HTML berikut:
+Untuk upgrade dari v1.3.5 ke v1.3.6, lakukan backup terlebih dahulu, lalu ganti **seluruh tujuh file aplikasi** berikut dari paket rilis:
 
+Backend `.gs`:
+- `Code.gs`
+- `DriveStorage.gs`
+- `NotesApi.gs`
+- `SyncOperations.gs`
+
+Frontend `.html`:
 - `Index.html`
 - `AppStyles.html`
 - `AppScripts.html`
 
-Tidak ada perubahan backend `.gs` yang diperlukan untuk Phase 3.6 menurut changelog paket ini.
+Jangan mengganti atau menghapus folder `apps/KeepFlow/storage/` di Google Drive. Jangan menghapus LocalStorage, karena dapat berisi draft dan operasi sinkronisasi yang belum selesai.
 
-Untuk upgrade dari versi yang lebih lama, jangan mengasumsikan daftar file di atas cukup. Ikuti changelog dan panduan instalasi versi perantara yang relevan. Buat backup sebelum upgrade.
+Untuk versi yang lebih lama dari v1.3.5, baca changelog versi perantara dan lakukan upgrade bertahap setelah backup. Jangan mengasumsikan upgrade langsung aman.
 
 Setelah mengganti file:
 
@@ -103,7 +110,7 @@ Setelah mengganti file:
 
 ## 8. Pengujian setelah deployment
 
-Mulai dari:
+Untuk v1.3.6, mulai dari `RELEASE-VALIDATION-v1.3.6.md`, lalu lanjutkan dengan:
 
 1. `TEST-CHECKLIST.md`
 2. `SYNC-QUEUE-TEST.md`

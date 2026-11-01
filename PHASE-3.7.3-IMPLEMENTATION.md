@@ -2,7 +2,7 @@
 
 ## Status
 
-Source implementation complete in development snapshot `v1.3.6-dev`. Live Apps Script and Google Drive verification remains the deployer's responsibility.
+Source implementation complete in development snapshot `v1.3.6`. Live Apps Script and Google Drive verification remains the deployer's responsibility.
 
 ## Scope
 

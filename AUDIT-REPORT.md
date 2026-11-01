@@ -1,8 +1,8 @@
-# Source Audit Report — Hadi KeepFlow v1.3.6-dev
+# Source Audit Report — Hadi KeepFlow v1.3.6
 
 ## Scope
 
-This report covers the v1.3.6-dev source through Phase 3.7.4:
+This report covers the v1.3.6 source through Phase 3.7.4:
 - Apps Script backend (`Code.gs`, `DriveStorage.gs`, `NotesApi.gs`, `SyncOperations.gs`).
 - Frontend (`Index.html`, `AppStyles.html`, `AppScripts.html`).
 - README, roadmap, changelog, and phase test guides.

@@ -4,7 +4,7 @@ Run these tests in a dedicated Apps Script test deployment first. Do not test th
 
 ## A. Pre-migration checks
 
-- [ ] Deploy the complete v1.3.6-dev source.
+- [ ] Deploy the complete v1.3.6 source.
 - [ ] Open the app while online and wait for cloud synchronization to finish.
 - [ ] Confirm old notes from `Umum` appear in Inbox.
 - [ ] Confirm other categories remain visible and unchanged.

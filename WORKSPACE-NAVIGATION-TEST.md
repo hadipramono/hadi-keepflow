@@ -1,6 +1,6 @@
 # Workspace Navigation Test — Phase 3.7.1
 
-**Target:** Hadi KeepFlow v1.3.6-dev  
+**Target:** Hadi KeepFlow v1.3.6  
 **Scope:** Frontend workspace navigation only. No Drive migration is performed in this phase.
 
 ## Important compatibility note

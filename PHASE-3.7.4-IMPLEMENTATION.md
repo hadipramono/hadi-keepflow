@@ -2,7 +2,7 @@
 
 ## Status
 
-Source implementation and local regression checks are complete in development snapshot `v1.3.6-dev`. Live Apps Script, browser, and Google Drive verification remain pending.
+Source implementation and local regression checks are complete in development snapshot `v1.3.6`. Live Apps Script, browser, and Google Drive verification remain pending.
 
 ## Scope
 

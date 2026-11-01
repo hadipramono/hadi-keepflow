@@ -1,4 +1,4 @@
-# v1.3.6-dev — Phase 3.7.4: Integration & Reliability
+# v1.3.6 — Phase 3.7.4: Integration & Reliability
 
 - Prefer the storage-root representation when de-duplicating notes exposed through both Inbox and a former category parent during interrupted Drive moves.
 - Apply the same Inbox-first recovery rule to atomic backup snapshots.

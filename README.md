@@ -4,8 +4,8 @@
 
 Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Drive. The browser provides the interface, local drafts, preferences, search, and an offline synchronization queue.
 
-> **Stable release: v1.3.5. Current development snapshot: v1.3.6-dev — Phase 3.7.4 (Integration & Reliability).**
-> The development snapshot includes Temporary Inbox storage, a backup-gated legacy `Umum` migration, and category create/rename/delete operations that preserve note files.
+> **GitHub pre-release: v1.3.6 — Phase 3.7 (Workspace & Category Architecture).**
+> This release includes Temporary Inbox storage, a backup-gated legacy `Umum` migration, category create/rename/delete operations, and integration/reliability improvements. Live Apps Script and Google Drive verification is still required before treating it as production-stable.
 
 ## Project status
 
@@ -29,7 +29,7 @@ Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Dri
 | Multi-user collaboration | Not supported |
 | AI / vector search | Not included |
 
-Feature descriptions reflect the source package and its accompanying changelogs. Browser behavior and live Google Drive behavior must be validated in the deployer's own Apps Script environment.
+Feature descriptions reflect the source package and its accompanying changelogs. Static and mock regression checks have been performed, but browser behavior and live Google Drive behavior must be validated in the deployer's own Apps Script environment.
 
 ## Screenshots
 
@@ -160,7 +160,7 @@ Static JavaScript syntax checks can catch parsing errors, but they do not prove 
 
 ## Roadmap
 
-See **[ROADMAP.md](ROADMAP.md)**. Phases 3.7.1 through 3.7.4 are implemented in source in this development snapshot. Live verification is still required: deploy to a separate test Apps Script project, run the phase-specific regression checklists, and verify Google Drive operations before using the changes with important data.
+See **[ROADMAP.md](ROADMAP.md)** and **[CHANGELOG-v1.3.6.md](CHANGELOG-v1.3.6.md)**. Review **[RELEASE-VALIDATION-v1.3.6.md](RELEASE-VALIDATION-v1.3.6.md)** before deployment. Phases 3.7.1 through 3.7.4 are implemented in source in this v1.3.6 pre-release. Live verification is still required: deploy to a separate test Apps Script project, run the phase-specific regression checklists, and verify Google Drive operations before using the changes with important data.
 
 ## Contributing
 

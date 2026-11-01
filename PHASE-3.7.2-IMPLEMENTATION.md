@@ -2,7 +2,7 @@
 
 ## Status
 
-Source implementation complete in development snapshot `v1.3.6-dev`. Live Google Apps Script and Google Drive migration is not verified by static or mock testing; the deployer must run the manual checklist.
+Source implementation complete in development snapshot `v1.3.6`. Live Google Apps Script and Google Drive migration is not verified by static or mock testing; the deployer must run the manual checklist.
 
 ## Storage contract
 

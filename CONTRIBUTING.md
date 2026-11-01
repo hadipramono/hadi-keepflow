@@ -4,7 +4,7 @@ Thank you for considering a contribution to Hadi KeepFlow.
 
 ## Current scope
 
-The current source package is v1.3.5. The next planned work is Phase 3.7 (Workspace & Category Architecture). Please check `ROADMAP.md` and open an issue to discuss substantial changes before starting implementation.
+The current GitHub pre-release is v1.3.6 (Phase 3.7: Workspace & Category Architecture). Live deployment verification remains pending; consult `ROADMAP.md` and `RELEASE-VALIDATION-v1.3.6.md`. Please check `ROADMAP.md` and open an issue to discuss substantial changes before starting implementation.
 
 ## Development principles
 

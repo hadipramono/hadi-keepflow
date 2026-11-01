@@ -128,7 +128,6 @@
         .withSuccessHandler(names => {
           reconcileCloudCategories(names);
           syncPendingCategoryCreates();
-          refreshLegacyInboxMigrationStatus();
         })
         .withFailureHandler(error => {
           console.warn('KeepFlow category load failed:', error);
@@ -161,7 +160,7 @@
       const name = String(categoryName || '').replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
       if (!name) return;
       if (name.toLocaleLowerCase() === 'umum') {
-        alert('Nama "Umum" dicadangkan untuk kompatibilitas data lama. Gunakan Inbox untuk catatan tanpa kategori.');
+        alert('Nama kategori tersebut tidak tersedia. Catatan tanpa kategori disimpan di Inbox.');
         return;
       }
       const existing = categories.find(item => item.toLowerCase() === name.toLowerCase());
@@ -277,6 +276,15 @@
     insertChecklistButton.addEventListener('mousedown', event => event.preventDefault());
     insertChecklistButton.addEventListener('click', insertEditorChecklist);
     document.getElementById('editor-template-select').addEventListener('change', event => applyProductivityTemplate(event.target.value));
+    document.getElementById('manage-templates-btn').addEventListener('click', openTemplateManager);
+    document.getElementById('close-template-manager-btn').addEventListener('click', closeTemplateManager);
+    document.getElementById('cancel-template-manager-btn').addEventListener('click', closeTemplateManager);
+    document.getElementById('template-manager-select').addEventListener('change', event => loadTemplateIntoManager(event.target.value));
+    document.getElementById('new-template-btn').addEventListener('click', () => { clearTemplateManagerForm(); document.getElementById('template-name-input').focus(); });
+    document.getElementById('save-template-btn').addEventListener('click', saveTemplateFromManager);
+    document.getElementById('delete-template-btn').addEventListener('click', deleteTemplateFromManager);
+    document.getElementById('reset-templates-btn').addEventListener('click', resetProductivityTemplates);
+    refreshProductivityTemplateOptions();
 
     function formatDate(isoString) {
       if (!isoString) return '-';
@@ -1046,7 +1054,7 @@
           return;
         }
         if (formattedNewCat.toLocaleLowerCase() === 'umum') {
-          alert('Nama "Umum" dicadangkan untuk kompatibilitas data lama.');
+          alert('Nama kategori tersebut tidak tersedia.');
           return;
         }
         if (formattedNewCat === oldCat) return;
@@ -1767,28 +1775,47 @@
       return [...unique.values()].slice(0, 50);
     }
 
-    // Productivity templates are HTML fragments stored inside the existing note body.
-    // They do not introduce a separate task model or change the Drive data schema.
-    function getProductivityTemplates() {
+    // Templates are user preferences stored locally; note content remains in the existing Markdown/HTML body.
+    const TEMPLATE_STORAGE_KEY = 'hadi_keepflow_templates_v1';
+
+    function getDefaultProductivityTemplates() {
       const today = new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
       return {
-        meeting: {
-          title: 'Catatan Rapat - ' + today,
-          content: '<h1>Catatan Rapat</h1><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Agenda</h2><ul><li></li></ul><h2>Peserta</h2><p></p><h2>Diskusi</h2><p></p><h2>Keputusan</h2><ul><li></li></ul><h2>Tindak Lanjut</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Tugas, penanggung jawab, dan tenggat</span></li><li><input type="checkbox"> <span></span></li></ul>'
-        },
-        'bible-study': {
-          title: 'Studi Alkitab - ' + today,
-          content: '<h1>Studi Alkitab</h1><p><strong>Bagian Alkitab:</strong> </p><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Observasi</h2><ul><li></li></ul><h2>Interpretasi</h2><p></p><h2>Aplikasi</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Apa yang perlu saya lakukan?</span></li><li><input type="checkbox"> <span></span></li></ul><h2>Doa</h2><p></p>'
-        },
-        project: {
-          title: 'Rencana Proyek - ' + today,
-          content: '<h1>Rencana Proyek</h1><h2>Tujuan</h2><p></p><h2>Ruang Lingkup</h2><ul><li></li></ul><h2>Tahapan dan Tugas</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Definisikan kebutuhan</span></li><li><input type="checkbox"> <span>Susun rencana kerja</span></li><li><input type="checkbox"> <span>Review hasil</span></li></ul><h2>Risiko / Catatan</h2><p></p>'
-        },
-        daily: {
-          title: 'Jurnal Harian - ' + today,
-          content: '<h1>Jurnal Harian</h1><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Prioritas Hari Ini</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span></span></li><li><input type="checkbox"> <span></span></li><li><input type="checkbox"> <span></span></li></ul><h2>Hal yang Disyukuri</h2><ul><li></li></ul><h2>Refleksi</h2><p></p><h2>Catatan untuk Besok</h2><p></p>'
-        }
+        meeting: { name: 'Catatan rapat', title: 'Catatan Rapat - ' + today, content: '<h1>Catatan Rapat</h1><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Agenda</h2><ul><li></li></ul><h2>Peserta</h2><p></p><h2>Diskusi</h2><p></p><h2>Keputusan</h2><ul><li></li></ul><h2>Tindak Lanjut</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Tugas, penanggung jawab, dan tenggat</span></li><li><input type="checkbox"> <span></span></li></ul>' },
+        'bible-study': { name: 'Studi Alkitab', title: 'Studi Alkitab - ' + today, content: '<h1>Studi Alkitab</h1><p><strong>Bagian Alkitab:</strong> </p><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Observasi</h2><ul><li></li></ul><h2>Interpretasi</h2><p></p><h2>Aplikasi</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Apa yang perlu saya lakukan?</span></li><li><input type="checkbox"> <span></span></li></ul><h2>Doa</h2><p></p>' },
+        project: { name: 'Rencana proyek', title: 'Rencana Proyek - ' + today, content: '<h1>Rencana Proyek</h1><h2>Tujuan</h2><p></p><h2>Ruang Lingkup</h2><ul><li></li></ul><h2>Tahapan dan Tugas</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span>Definisikan kebutuhan</span></li><li><input type="checkbox"> <span>Susun rencana kerja</span></li><li><input type="checkbox"> <span>Review hasil</span></li></ul><h2>Risiko / Catatan</h2><p></p>' },
+        daily: { name: 'Jurnal harian', title: 'Jurnal Harian - ' + today, content: '<h1>Jurnal Harian</h1><p><strong>Tanggal:</strong> ' + escapeHTML(today) + '</p><h2>Prioritas Hari Ini</h2><ul class="keepflow-checklist"><li><input type="checkbox"> <span></span></li><li><input type="checkbox"> <span></span></li><li><input type="checkbox"> <span></span></li></ul><h2>Hal yang Disyukuri</h2><ul><li></li></ul><h2>Refleksi</h2><p></p><h2>Catatan untuk Besok</h2><p></p>' }
       };
+    }
+
+    function getProductivityTemplates() {
+      const defaults = getDefaultProductivityTemplates();
+      try {
+        const saved = JSON.parse(localStorage.getItem(TEMPLATE_STORAGE_KEY) || 'null');
+        if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
+          return Object.fromEntries(Object.entries(saved).filter(([key, value]) => /^[a-z0-9_-]{1,60}$/i.test(key) && value && typeof value.name === 'string' && typeof value.title === 'string' && typeof value.content === 'string'));
+        }
+      } catch (error) { console.warn('Template KeepFlow tidak dapat dibaca:', error); }
+      return defaults;
+    }
+
+    function saveProductivityTemplates(templates) {
+      localStorage.setItem(TEMPLATE_STORAGE_KEY, JSON.stringify(templates));
+      refreshProductivityTemplateOptions();
+    }
+
+    function refreshProductivityTemplateOptions() {
+      const select = document.getElementById('editor-template-select');
+      if (!select) return;
+      const previous = select.value;
+      select.innerHTML = '<option value="">Pilih template...</option>';
+      Object.entries(getProductivityTemplates()).forEach(([key, template]) => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = template.name;
+        select.appendChild(option);
+      });
+      if (getProductivityTemplates()[previous]) select.value = previous;
     }
 
     function applyProductivityTemplate(templateKey) {
@@ -1809,6 +1836,98 @@
       scheduleEditorDraftSave();
       editor.focus();
       select.value = '';
+    }
+
+    let editingTemplateKey = null;
+    function openTemplateManager() {
+      const modal = document.getElementById('template-manager-modal');
+      if (!modal) return;
+      refreshTemplateManagerList();
+      clearTemplateManagerForm();
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      document.getElementById('template-manager-select').focus();
+    }
+
+    function closeTemplateManager() {
+      const modal = document.getElementById('template-manager-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      editingTemplateKey = null;
+    }
+
+    function refreshTemplateManagerList(selectedKey = '') {
+      const select = document.getElementById('template-manager-select');
+      const templates = getProductivityTemplates();
+      select.innerHTML = '<option value="">Pilih template untuk diedit...</option>';
+      Object.entries(templates).forEach(([key, template]) => {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = template.name;
+        select.appendChild(option);
+      });
+      select.value = selectedKey;
+      document.getElementById('delete-template-btn').disabled = !selectedKey;
+      document.getElementById('delete-template-btn').classList.toggle('opacity-40', !selectedKey);
+    }
+
+    function clearTemplateManagerForm() {
+      editingTemplateKey = null;
+      document.getElementById('template-manager-select').value = '';
+      document.getElementById('template-name-input').value = '';
+      document.getElementById('template-title-input').value = '';
+      document.getElementById('template-content-editor').innerHTML = '';
+      document.getElementById('delete-template-btn').disabled = true;
+    }
+
+    function loadTemplateIntoManager(key) {
+      const template = getProductivityTemplates()[key];
+      if (!template) { clearTemplateManagerForm(); return; }
+      editingTemplateKey = key;
+      document.getElementById('template-name-input').value = template.name;
+      document.getElementById('template-title-input').value = template.title;
+      document.getElementById('template-content-editor').innerHTML = sanitizeEditorHTML(template.content);
+      document.getElementById('delete-template-btn').disabled = false;
+    }
+
+    function saveTemplateFromManager() {
+      const name = document.getElementById('template-name-input').value.trim();
+      const title = document.getElementById('template-title-input').value.trim();
+      const content = sanitizeEditorHTML(document.getElementById('template-content-editor').innerHTML);
+      if (!name) { alert('Nama template wajib diisi.'); return; }
+      if (!title) { alert('Judul catatan wajib diisi.'); return; }
+      if (!content.trim()) { alert('Isi template tidak boleh kosong.'); return; }
+      const templates = getProductivityTemplates();
+      let key = editingTemplateKey;
+      if (!key) {
+        const base = name.toLocaleLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'template';
+        key = base; let suffix = 2;
+        while (templates[key]) key = base + '-' + suffix++;
+      }
+      templates[key] = { name, title, content };
+      saveProductivityTemplates(templates);
+      editingTemplateKey = key;
+      refreshTemplateManagerList(key);
+      alert('Template berhasil disimpan di browser ini.');
+    }
+
+    function deleteTemplateFromManager() {
+      if (!editingTemplateKey) return;
+      const templates = getProductivityTemplates();
+      const template = templates[editingTemplateKey];
+      if (!template || !confirm('Hapus template "' + template.name + '"? Catatan yang sudah dibuat tidak akan berubah.')) return;
+      delete templates[editingTemplateKey];
+      saveProductivityTemplates(templates);
+      clearTemplateManagerForm();
+      refreshTemplateManagerList();
+    }
+
+    function resetProductivityTemplates() {
+      if (!confirm('Pulihkan empat template bawaan? Template kustom yang tersimpan akan diganti.')) return;
+      const defaults = getDefaultProductivityTemplates();
+      saveProductivityTemplates(defaults);
+      refreshTemplateManagerList();
+      clearTemplateManagerForm();
     }
 
     function insertEditorChecklist() {
@@ -2101,99 +2220,6 @@
 
     document.getElementById('data-progress-close').addEventListener('click', hideDataProgress);
 
-    let legacyInboxMigrationStatus = null;
-    let migrationBackupReady = false;
-
-    function renderLegacyInboxMigrationStatus(status) {
-      legacyInboxMigrationStatus = status;
-      const button = document.getElementById('migrate-legacy-inbox-btn');
-      const detail = document.getElementById('legacy-inbox-migration-detail');
-      if (!button || !detail) return;
-      const count = Number(status && status.noteCount) || 0;
-      const show = count > 0 || Number(status && status.folderCount) > 0 ||
-        Number(status && status.otherFileCount) > 0 || Number(status && status.nestedFolderCount) > 0;
-      button.classList.toggle('hidden', !show);
-      button.disabled = !migrationBackupReady || count === 0 || !navigator.onLine;
-      button.textContent = count > 0
-        ? 'Migrasi ' + count + ' catatan Umum ke Inbox'
-        : 'Periksa sisa folder Umum';
-      detail.textContent = count > 0
-        ? count + ' catatan lama masih berada di folder Umum. Buat backup ZIP sebelum migrasi.'
-        : (Number(status && status.otherFileCount) > 0 || Number(status && status.nestedFolderCount) > 0
-          ? 'Tidak ada catatan Markdown yang tersisa, tetapi file lain atau subfolder tetap ada dan tidak akan diubah.'
-          : (show ? 'Folder Umum kosong dan tidak lagi berisi catatan.' : ''));
-    }
-
-    async function refreshLegacyInboxMigrationStatus() {
-      if (!navigator.onLine || !serverReady) return;
-      try {
-        const status = await callKeepFlowServer('getLegacyInboxMigrationStatus');
-        if (status && status.status === 'success') renderLegacyInboxMigrationStatus(status);
-      } catch (error) {
-        console.warn('KeepFlow legacy Inbox status error:', error);
-      }
-    }
-
-    async function runLegacyInboxMigration() {
-      const button = document.getElementById('migrate-legacy-inbox-btn');
-      if (!migrationBackupReady) {
-        alert('Buat dan unduh Backup ZIP terbaru terlebih dahulu. Tombol migrasi akan aktif setelah backup berhasil dibuat pada sesi ini.');
-        return;
-      }
-      try {
-        // Re-check that no sync queue or editor draft changed after the backup.
-        ensureBackupReady();
-      } catch (error) {
-        alert(error.message);
-        return;
-      }
-      if (!legacyInboxMigrationStatus || !legacyInboxMigrationStatus.noteCount) {
-        await refreshLegacyInboxMigrationStatus();
-        return;
-      }
-      const count = legacyInboxMigrationStatus.noteCount;
-      const confirmed = confirm(
-        'Migrasi Temporary Inbox\n\n' +
-        count + ' catatan dalam folder Umum akan dipindahkan ke root storage Google Drive.\n' +
-        'ID, nama file, isi, metadata, tag, pin, dan status arsip dipertahankan.\n\n' +
-        'Folder Umum hanya akan dibuang ke Sampah jika benar-benar kosong. File lain dan subfolder tidak akan diubah.\n\n' +
-        'Pastikan file Backup ZIP sudah berhasil diunduh dan disimpan. Lanjutkan?'
-      );
-      if (!confirmed) return;
-
-      button.disabled = true;
-      button.textContent = 'Memigrasikan...';
-      try {
-        const result = await callKeepFlowServer('migrateLegacyInbox');
-        if (!result || !['success', 'partial'].includes(result.status)) {
-          throw new Error((result && result.message) || 'Migrasi tidak berhasil.');
-        }
-        await loadInitialData();
-        const status = await callKeepFlowServer('getLegacyInboxMigrationStatus');
-        renderLegacyInboxMigrationStatus(status);
-        const summary = [
-          'Migrasi selesai.',
-          'Catatan dipindahkan: ' + (result.migrated || 0),
-          'Sudah berada di root: ' + (result.alreadyInStorage || 0),
-          'Folder Umum dipindahkan ke Sampah: ' + (result.foldersTrashed || 0),
-          'Catatan tersisa: ' + (result.remainingNoteCount || 0),
-          'File non-catatan dilewati: ' + (result.otherFileCount || 0),
-          'Subfolder tersisa: ' + (result.nestedFolderCount || 0)
-        ];
-        if (result.errors && result.errors.length) {
-          summary.push('', 'Kesalahan: ' + result.errors.length, ...result.errors.slice(0, 5).map(item => item.file + ': ' + item.message));
-        }
-        alert(summary.join('\n'));
-      } catch (error) {
-        console.error('KeepFlow legacy Inbox migration error:', error);
-        alert('Migrasi gagal atau terhenti: ' + error.message + '\n\nCatatan yang sudah berhasil dipindahkan tetap aman. Periksa status lalu jalankan migrasi kembali.');
-        await refreshLegacyInboxMigrationStatus();
-      } finally {
-        if (button) button.disabled = !migrationBackupReady ||
-          !legacyInboxMigrationStatus || !legacyInboxMigrationStatus.noteCount;
-      }
-    }
-
     async function createKeepFlowBackup() {
       const button = document.getElementById('backup-zip-btn');
       try {
@@ -2273,8 +2299,6 @@
         });
 
         downloadBlob(blob, 'hadi_keepflow_backup_' + new Date().toISOString().slice(0, 10) + '.zip');
-        migrationBackupReady = true;
-        if (legacyInboxMigrationStatus) renderLegacyInboxMigrationStatus(legacyInboxMigrationStatus);
         finishDataProgress('Backup selesai', cloudNotes.length + ' catatan dan ' + manifest.categories.length + ' kategori berhasil di-backup.', false);
         setSyncStatus('Backup ZIP berhasil dibuat', 'fa-cloud-arrow-down', 'text-green-500');
         await new Promise(resolve => setTimeout(resolve, 900));
@@ -2564,8 +2588,6 @@
     }
 
     document.getElementById('backup-zip-btn').addEventListener('click', createKeepFlowBackup);
-    const migrateLegacyInboxButton = document.getElementById('migrate-legacy-inbox-btn');
-    if (migrateLegacyInboxButton) migrateLegacyInboxButton.addEventListener('click', runLegacyInboxMigration);
     document.getElementById('restore-zip-file').addEventListener('change', event => {
       const file = event.target.files && event.target.files[0];
       if (file) restoreKeepFlowZip(file);

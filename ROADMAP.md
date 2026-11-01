@@ -4,9 +4,9 @@ This document distinguishes implemented code from work that still requires deplo
 
 ## Release baseline
 
-- Stable public release: **v1.3.5**
-- Current development snapshot: **v1.3.6-dev**
-- Current workstream: **Phase 3.7.4 — Integration & Reliability**
+- Previous stable public release: **v1.3.5**
+- Current GitHub pre-release: **v1.3.6** (Phase 3.7.1–3.7.4 source implementation)
+- Next target: **v1.3.7 stable release**, after Phase 3.7.5 stabilization and live validation
 
 ## Product direction
 
@@ -77,7 +77,7 @@ Hadi KeepFlow is evolving into a Personal Knowledge Management (PKM) system whil
 
 The migration is explicit, not automatic. Before running it:
 
-1. Deploy the v1.3.6-dev source to a test deployment first.
+1. Deploy the v1.3.6 source to a test deployment first.
 2. Wait for cloud data to finish loading and pending sync operations to settle.
 3. Generate and save a fresh Backup ZIP.
 4. Run the migration from **Data & Backup**.
@@ -86,6 +86,13 @@ The migration is explicit, not automatic. Before running it:
 7. Keep the backup until verification is complete.
 
 A partial migration is retryable. The migration does not delete note files. A legacy folder containing unrelated files or nested folders is not trashed.
+
+## Next release gate — Phase 3.7.5 Stabilization & Release
+
+- Resolve issues found during real-world test deployment and daily use.
+- Complete live regression checks for Drive persistence, Inbox migration, category lifecycle, offline sync, conflicts, and backup/restore.
+- Review security defaults, performance, and release documentation.
+- Publish v1.3.7 as stable only after the release validation checklist passes.
 
 ## Later planned phases
 

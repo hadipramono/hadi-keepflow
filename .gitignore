@@ -27,3 +27,5 @@ backups/
 # Apps Script local tooling
 .clasp.json
 .claspignore
+
+_arsip

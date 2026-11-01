@@ -1,8 +1,8 @@
 # Changelog
 
-This file summarizes notable project releases. Detailed phase notes remain in the corresponding `CHANGELOG-*.md` files.
+This file summarizes notable project releases. Detailed phase notes remain in the corresponding `CHANGELOG-*.md` files. The v1.3.6 entry covers Phase 3.7.1 through 3.7.4.
 
-## v1.3.6-dev — Phase 3.7.1: Workspace Navigation
+## v1.3.6 — Phase 3.7.1: Workspace Navigation
 
 - Reorganized the sidebar into Workspace, Organization, and Data & Backup areas.
 - Added Inbox navigation with an active uncategorized/legacy `Umum` note count.
@@ -32,7 +32,7 @@ These repository-readiness changes do not implement Phase 3.7 and do not change 
 See `CHANGELOG-v1.3.5-phase-3.6.md`.
 
 
-## v1.3.6-dev — Phase 3.7.2: Temporary Inbox & Legacy Data Migration
+## v1.3.6 — Phase 3.7.2: Temporary Inbox & Legacy Data Migration
 
 - Uncategorized notes now use an empty category and are stored directly under the Drive storage root.
 - Legacy `Umum` folders are treated as Inbox sources until migrated.
@@ -44,7 +44,7 @@ See `CHANGELOG-v1.3.5-phase-3.6.md`.
 - Restore remains compatible with older ZIP backups containing `Umum/` paths.
 
 
-## v1.3.6-dev — Phase 3.7.3: Category Management
+## v1.3.6 — Phase 3.7.3: Category Management
 
 - Added case-insensitive category folder lookup and duplicate prevention.
 - Category rename now uses a dedicated backend operation and renames the Drive folder without rewriting note files.
@@ -56,10 +56,12 @@ See `CHANGELOG-v1.3.5-phase-3.6.md`.
 - Structural category changes require online state and a clean synchronization queue.
 
 
-## v1.3.6-dev — Phase 3.7.4: Integration & Reliability
+## v1.3.6 — Phase 3.7.4: Integration & Reliability
 
 - Prefer the storage-root representation when de-duplicating notes exposed through both Inbox and a former category parent during interrupted Drive moves.
 - Apply the same Inbox-first recovery rule to atomic backup snapshots.
 - Resolve note-save destinations case-insensitively to prevent duplicate category folders that differ only by capitalization.
 - Return canonical Drive category names from note saves and reconcile acknowledged local category casing safely.
 - Add integration/reliability documentation and a manual regression checklist for workspace views, offline sync, conflicts, migration, and backup/restore.
+
+- v1.3.6: Phase 3.7 core PKM workspace, Inbox migration, category management, integration/reliability improvements, and editor layout hotfix.

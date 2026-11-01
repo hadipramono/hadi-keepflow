@@ -1,6 +1,6 @@
 # Phase 3.7.1 — Workspace Navigation
 
-**Development snapshot:** v1.3.6-dev  
+**Development snapshot:** v1.3.6  
 **Stable baseline:** v1.3.5  
 **Status:** implementation prepared; live Apps Script/browser validation remains pending.
 

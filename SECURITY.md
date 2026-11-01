@@ -2,7 +2,7 @@
 
 ## Intended deployment model
 
-Hadi KeepFlow v1.3.5 is a **single-user personal application**. It does not implement application-level authentication, user roles, tenant isolation, or per-user authorization.
+Hadi KeepFlow v1.3.6 is a **single-user personal application**. It does not implement application-level authentication, user roles, tenant isolation, or per-user authorization.
 
 The recommended model is:
 

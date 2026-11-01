@@ -63,6 +63,18 @@
       outline: 2px solid #3b82f6;
       outline-offset: 2px;
     }
+    /* Editor layout: keep long content in the scrollable modal body, not over metrics/tags. */
+    #editor-modal > .editor-modal-body { min-height: 0; }
+    #editor-content-editable {
+      display: block;
+      flex: 0 0 auto;
+      height: auto;
+      min-height: max(45vh, 250px);
+      overflow: visible;
+      overflow-wrap: anywhere;
+    }
+    #editor-metrics,
+    #modal-tags-input { flex-shrink: 0; }
     .editor-content { line-height: 1.75; overflow-wrap: anywhere; }
     .editor-content h1 { font-size: 1.65em; line-height: 1.25; font-weight: 700; margin: .8em 0 .45em; }
     .editor-content h2 { font-size: 1.3em; line-height: 1.35; font-weight: 650; margin: .75em 0 .4em; }
@@ -133,3 +145,10 @@
     }
     #bulk-actions-bar button:disabled { opacity: .45; cursor: not-allowed; }
   </style>
+
+/* Placeholder for the rich-text template editor. */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+}
