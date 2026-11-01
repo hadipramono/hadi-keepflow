@@ -1,0 +1,29 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+token.json
+client_secret*.json
+
+# User data and exports
+backup/
+backups/
+*.zip
+*.jsonl
+*.sqlite
+*.db
+
+# Apps Script local tooling
+.clasp.json
+.claspignore

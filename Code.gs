@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.2.8.3
+ * Hadi KeepFlow v1.3.5
  * Google Apps Script web entry point and shared utilities.
  * Backend modules: DriveStorage.gs, SyncOperations.gs, NotesApi.gs.
  * Storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md
@@ -9,9 +9,10 @@
  */
 
 function doGet() {
+  // Keep Apps Script's default X-Frame-Options protection.
+  // Do not enable ALLOWALL unless embedding is an explicit, reviewed requirement.
   return HtmlService.createTemplateFromFile('Index').evaluate()
     .setTitle('Hadi KeepFlow')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 

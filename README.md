@@ -1,69 +1,163 @@
 # Hadi KeepFlow
 
-Personal notes application using Google Apps Script, Google Drive Markdown files, and browser LocalStorage for offline/local state.
+**A personal knowledge and note-taking workspace built with Google Apps Script, Google Drive, and browser storage.**
 
-## Current package
-**v1.3.5 — Phase 3.6 Productivity Features**
+Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Drive. The browser provides the interface, local drafts, preferences, search, and an offline synchronization queue.
 
-## Source structure
-- `Index.html`: page markup and shell.
-- `AppStyles.html`: custom application CSS.
-- `AppScripts.html`: frontend application logic.
-- `Code.gs`: web entry point, HTML include helper, and general utilities.
-- `DriveStorage.gs`: Drive folder access, ownership validation, parsing, and file naming.
-- `SyncOperations.gs`: idempotency receipt lifecycle and replay.
-- `NotesApi.gs`: note list/save/delete and category operations.
+> **Current source package: v1.3.5 — Phase 3.6 (Productivity Features).**
+> Phase 3.7 (Workspace & Category Architecture, including Temporary Inbox) is a planned phase and is **not implemented in this package**.
 
-All `.gs` files share the Apps Script global namespace; public function names are retained for `google.script.run`.
+## Project status
 
-## Data and reliability safeguards
-This refactor is intended to preserve the v1.2.7 data format, LocalStorage keys, queue semantics, optimistic version checks, retry behavior, and Drive ownership checks. See prior `CHANGELOG-*.md` and test guides for the detailed safeguards and limitations.
+| Area | Current status |
+|---|---|
+| Notes and categories | Implemented |
+| Google Drive persistence | Implemented |
+| Local cache and offline queue | Implemented |
+| Conflict detection and retry receipts | Implemented |
+| Backup and restore ZIP | Implemented; uses JSZip CDN |
+| Search, filters, sorting | Implemented |
+| Bulk note organization | Implemented |
+| Editor formatting and drafts | Implemented |
+| Dashboard and local preferences | Implemented |
+| Templates and checklists | Implemented |
+| Temporary Inbox | **Planned for Phase 3.7** |
+| Note linking and backlinks | Planned |
+| Multi-user collaboration | Not supported |
+| AI / vector search | Not included |
 
-## Tests
-Run `MAINTAINABILITY-TEST.md` plus the existing sync, offline, security, conflict, recovery, performance, navigation, and editor test guides. Browser and live Drive validation remain the project owner's responsibility.
+Feature descriptions reflect the source package and its accompanying changelogs. Browser behavior and live Google Drive behavior must be validated in the deployer's own Apps Script environment.
 
+## Screenshots
 
-## Hotfix v1.2.8.1
+Screenshots can be added here after capturing the deployed application. Avoid publishing screenshots that expose personal note content, Google account details, or Drive identifiers.
 
-Fixes a documentation-comment boundary in `DriveStorage.gs` that hid the storage folder helper declarations. Replace the backend file `DriveStorage.gs` with this hotfix version. No other project files need to change.
+## Architecture
 
+```text
+Browser
+├── Index.html          Application shell
+├── AppStyles.html      Custom CSS
+├── AppScripts.html     Frontend state, UI, editor, search, offline queue
+└── LocalStorage        Cache, drafts, preferences, pending operations
+          │
+          │ google.script.run
+          ▼
+Google Apps Script
+├── Code.gs             Web entry point and shared utilities
+├── NotesApi.gs         Note and category APIs
+├── DriveStorage.gs     Drive storage, parsing, ownership checks
+└── SyncOperations.gs   Idempotency receipts and retry handling
+          │
+          ▼
+Google Drive
+└── My Drive/apps/KeepFlow/storage/
+    ├── <category>/
+    │   └── <note>.md
+    └── <note>.md       Root-level notes are read as "Umum"
+```
 
-## Hotfix v1.2.8.2
-Fixes newly created categories not appearing in the sidebar/editor category list and not surviving reload. Adds a Drive category-folder API and a local pending category queue. See `CATEGORY-PERSISTENCE-TEST.md` and `CATEGORY-MANAGEMENT-TEST.md`.
+### Source files
 
+| File | Responsibility |
+|---|---|
+| `Code.gs` | `doGet()`, HTML include helper, safe-name and boolean utilities |
+| `DriveStorage.gs` | Drive folder creation, file ownership validation, Markdown/metadata parsing |
+| `NotesApi.gs` | List, save, delete, backup snapshot, and category operations |
+| `SyncOperations.gs` | Idempotency receipts and safe replay of retried operations |
+| `Index.html` | HTML shell and external frontend dependencies |
+| `AppStyles.html` | Application styles |
+| `AppScripts.html` | Frontend application logic |
 
-## v1.2.8.3 — Category Management
-- Only `Umum` is a built-in default category.
-- `Pekerjaan` and `Pribadi` are no longer injected as defaults; existing Drive folders and categories used by notes remain visible.
-- Empty non-default category folders can be moved to Google Drive Trash from the sidebar.
-- Categories containing any Drive file or nested folder are protected by a server-side check.
-- Archived notes are included in the UI count and prevent deletion.
-- Cloud category reconciliation removes stale local-only default entries while retaining categories used by notes and pending category creation.
+All `.gs` files share the Apps Script global namespace. Keep public server function names compatible with calls made through `google.script.run`.
 
+## Data model and storage behavior
 
-## Latest release: v1.3.0 — Phase 3.1
-Data Portability & Backup: ZIP backup, ZIP restore/import, manifest, category structure, metadata preservation, import preview, duplicate detection, and merge-only restore. See `CHANGELOG-v1.3.0-phase-3.1.md` and `DATA-PORTABILITY-TEST.md`.
+- Google Drive is the persistent source of truth for cloud-synced notes.
+- Notes are stored as `.md` files, with JSON metadata wrapped in the `---JSON---` delimiter at the start of the file.
+- The current backend stores notes in a category folder. Notes directly under `storage/` are interpreted as category `Umum`.
+- The current frontend/backend use `Umum` as the default category when a note has no category value. This is the existing v1.3.5 behavior; it is **not** the planned Temporary Inbox behavior.
+- LocalStorage is used for local note cache, pending sync operations, editor draft recovery, search history, category state, and user preferences.
+- Do not clear LocalStorage during upgrades unless a migration guide explicitly instructs you to do so.
 
+## Requirements
 
-## v1.3.0.1 hotfix
-Adds visible progress reporting for ZIP backup and restore/import. See `CHANGELOG-v1.3.0.1-progress-ui.md`.
+- A Google account.
+- Access to Google Apps Script and Google Drive.
+- A modern browser with JavaScript and LocalStorage enabled.
+- Internet access for the current external CDN dependencies.
+- Permission to authorize the Apps Script project to access Google Drive.
 
+## Installation and deployment
 
-## v1.3.1 — Phase 3.2
-Adds multi-field, multi-term search, quoted phrases, match highlighting, recent search history, sorting, and combined filters. See `CHANGELOG-v1.3.1-phase-3.2.md` and `SEARCH-DISCOVERY-TEST.md`.
+See **[INSTALL.md](INSTALL.md)** for a step-by-step setup and deployment guide.
 
+For a personal deployment, keep the web app restricted to **Only myself**. The application is designed as a single-user personal workspace, not as a public multi-user service.
 
-## v1.3.2 — Phase 3.3 Note Organization
-Adds multi-note selection and bulk organization actions: move to an existing category, add/remove tags, pin/unpin, and archive/restore. Selection is performed against the current filtered result set; permanent deletion remains an individual action for safety. No backend or data schema changes. See `CHANGELOG-v1.3.2-phase-3.3.md` and `NOTE-ORGANIZATION-TEST.md`.
+## Security and privacy
 
+Read **[SECURITY.md](SECURITY.md)** before deployment or publishing a fork.
 
-## v1.3.3 — Phase 3.4 Editor Enhancement
-Improves the writing experience with undo/redo, paragraph and heading formatting, blockquotes, lists, safe link insertion, horizontal separators, clear-formatting action, keyboard shortcuts, live word/character counts, and clearer editor typography. Existing local draft recovery and the sync queue are retained. No backend or data schema changes. See `CHANGELOG-v1.3.3-phase-3.4.md` and `EDITOR-ENHANCEMENT-TEST.md`.
+Important points:
 
+- The application has no application-level sign-in, tenant isolation, or per-user authorization layer.
+- Do not deploy an instance that executes as the owner's account with public or broad access. Visitors could invoke server functions with the privileges of the deploying account.
+- Each person should deploy their own Apps Script project and authorize it against their own Google Drive.
+- Notes and LocalStorage data are not encrypted by this application.
+- Do not commit personal notes, backup ZIP files, OAuth tokens, Apps Script deployment URLs, or private Drive identifiers.
+- The project uses third-party CDN resources. Review their availability and supply-chain implications before production use.
 
-## v1.3.4 — Phase 3.5 Dashboard & Personalization
-Adds a dedicated dashboard with active/pinned/archived/today-updated note statistics, recently updated notes, and category distribution. Adds local browser preferences for display name, system/light/dark theme, grid/list layout, and default sorting. Preferences are stored separately in LocalStorage; no backend, Drive metadata, or note schema changes. See `CHANGELOG-v1.3.4-phase-3.5.md` and `DASHBOARD-PERSONALIZATION-TEST.md`.
+## External dependencies
 
+The current `Index.html` loads these libraries from public CDNs:
 
-## v1.3.5 — Phase 3.6 Productivity Features
-Adds four reusable note templates (meeting, Bible study, project plan, daily journal), interactive checklists, task completion metrics, and checklist state markers in note previews/search. Checklist content remains inside the existing note body; no task database or backend changes are introduced. See `CHANGELOG-v1.3.5-phase-3.6.md` and `PRODUCTIVITY-FEATURES-TEST.md`.
+- Tailwind CSS Play CDN — styling utilities.
+- Font Awesome 6.4.0 — icons.
+- JSZip 3.10.1 — ZIP backup and restore.
+
+These dependencies require network access in the browser. Tailwind's Play CDN is convenient for this Apps Script implementation but is not the recommended production build approach for a conventional web application.
+
+## Testing
+
+The repository contains manual test guides for:
+
+- Sync queue and recovery
+- Offline reconciliation
+- Backend security and Drive ownership checks
+- Conflict detection
+- Category persistence and management
+- Backup and restore
+- Search and discovery
+- Bulk note organization
+- Editor behavior
+- Dashboard and personalization
+- Templates and checklists
+
+Start with **[TEST-CHECKLIST.md](TEST-CHECKLIST.md)** and then run the relevant phase-specific test documents.
+
+Static JavaScript syntax checks can catch parsing errors, but they do not prove correct behavior in Apps Script, browser rendering, Google Drive permissions, or concurrent multi-device use. Those require deployment and manual testing.
+
+## Roadmap
+
+See **[ROADMAP.md](ROADMAP.md)**. The next planned phase is:
+
+**Phase 3.7 — Workspace & Category Architecture**
+- Workspace navigation improvements.
+- Temporary Inbox for notes that have not yet been assigned a category.
+- Category management and safe reassignment.
+- Integration with search, dashboard, offline queue, and backup/restore.
+
+The Temporary Inbox is a planned behavior, not a feature of v1.3.5.
+
+## Contributing
+
+Bug reports, documentation improvements, and focused pull requests are welcome. Read **[CONTRIBUTING.md](CONTRIBUTING.md)** before submitting changes.
+
+Please do not submit real user notes, personal backups, account details, or private Drive identifiers in issues or pull requests.
+
+## License
+
+This project is licensed under the **MIT License**. You may use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the software, subject to the conditions in the [`LICENSE`](LICENSE) file.
+
+The license requires preservation of the copyright notice and permission notice in copies or substantial portions of the software. The software is provided "as is", without warranty of any kind.
+

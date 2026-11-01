@@ -1,112 +1,118 @@
-# Instalasi Hadi KeepFlow
+# Instalasi dan Deployment Hadi KeepFlow
 
-1. Backup seluruh project Apps Script dan export data JSON.
-2. Di editor Apps Script, buat/ganti file server `.gs`: `Code.gs`, `DriveStorage.gs`, `SyncOperations.gs`, `NotesApi.gs`.
-3. Buat/ganti file HTML: `Index.html`, `AppStyles.html`, `AppScripts.html`.
-4. Pastikan isi file lama yang sudah dipindahkan tidak tertinggal sebagai duplikasi fungsi.
-5. Simpan project dan periksa error syntax.
-6. Deploy sebagai **New version**.
-7. Jalankan `MAINTAINABILITY-TEST.md` dan checklist regresi sebelumnya.
+Panduan ini ditujukan untuk pengguna yang ingin membuat **instance pribadi** Hadi KeepFlow dari source code repository. Setiap pengguna sebaiknya membuat Apps Script project sendiri dan menyimpan catatan di Google Drive miliknya sendiri.
 
-`Code.gs` sekarang menggunakan `createTemplateFromFile('Index').evaluate()` dan helper `include()` untuk memuat HTML partial.
+> Source package saat ini adalah **v1.3.5**. Temporary Inbox Phase 3.7 belum termasuk dalam paket ini.
 
-Tidak perlu menghapus LocalStorage. Jangan mengganti nama key antrean atau draft.
+## 1. Prasyarat
 
+- Google account.
+- Browser modern dengan JavaScript aktif.
+- Akses ke [Google Apps Script](https://script.google.com/).
+- Akses ke Google Drive.
+- Internet untuk memuat CDN Tailwind CSS, Font Awesome, dan JSZip.
 
-## Hotfix v1.2.8.1
+## 2. Buat project Apps Script
 
-If upgrading from v1.2.8, replace only `DriveStorage.gs` with the file in this package, save, and deploy a new Apps Script version. Do not delete or reset LocalStorage.
+1. Buka [Google Apps Script](https://script.google.com/).
+2. Buat **New project**.
+3. Beri nama project, misalnya `Hadi KeepFlow`.
+4. Hapus file contoh yang tidak digunakan.
+5. Tambahkan empat file script berikut:
+   - `Code.gs`
+   - `DriveStorage.gs`
+   - `NotesApi.gs`
+   - `SyncOperations.gs`
+6. Tambahkan tiga file HTML berikut:
+   - `Index.html`
+   - `AppStyles.html`
+   - `AppScripts.html`
+7. Salin isi file dari repository ke file Apps Script yang sesuai.
+8. Pastikan tidak ada fungsi lama yang tertinggal sebagai duplikasi.
 
+Semua file `.gs` berada dalam satu global namespace. Jangan membungkus setiap file dalam module atau namespace sendiri.
 
-## Hotfix v1.2.8.2 — Category persistence
+## 3. Periksa project
 
-If upgrading from v1.2.8.1, replace only these two files:
-- `NotesApi.gs`
-- `AppScripts.html`
+1. Simpan project.
+2. Periksa apakah editor Apps Script menampilkan syntax error.
+3. Jalankan deployment web app untuk pertama kali.
+4. Ikuti proses otorisasi Google. Aplikasi memerlukan akses Google Drive untuk menyimpan dan membaca file catatan.
+5. Setelah aplikasi terbuka, buat satu catatan uji.
+6. Periksa Google Drive. Folder berikut akan dibuat saat diperlukan:
 
-Save and deploy as a **New version**. Do not clear LocalStorage. Existing note data and sync queue keys are preserved. Run `CATEGORY-PERSISTENCE-TEST.md`.
+   `My Drive/apps/KeepFlow/storage/`
 
+Folder kategori dan file Markdown akan berada di bawah folder `storage`.
 
-## v1.2.8.3 — Category Management
-If upgrading from v1.2.8.2, replace only:
-- `NotesApi.gs`
-- `AppScripts.html`
+## 4. Deploy sebagai Web App
 
-Save the project and deploy as a **New version**. Do not clear LocalStorage. `Umum` is the only built-in category. Existing `Pekerjaan`, `Pribadi`, and other category folders are not deleted automatically; they remain available if present in Drive or used by notes. A non-default category can be deleted only when its Drive folder contains no files and no subfolders. The folder is moved to Google Drive Trash, not permanently deleted. Run `CATEGORY-MANAGEMENT-TEST.md` after deployment.
+1. Pilih **Deploy → New deployment**.
+2. Pilih jenis deployment **Web app**.
+3. Untuk penggunaan pribadi, atur:
+   - **Execute as:** Me
+   - **Who has access:** Only myself
+4. Klik **Deploy**.
+5. Simpan URL deployment untuk akses pribadi.
 
+**Peringatan:** Jangan mengubah akses menjadi Anyone atau Anyone with Google account pada deployment yang berjalan sebagai akun pemilik. Aplikasi belum memiliki autentikasi aplikasi dan otorisasi per pengguna. Server function dapat dipanggil melalui `google.script.run`; akses publik dapat membuka operasi Drive dengan hak akun yang menjalankan deployment.
 
-## v1.3.0 — Phase 3.1 Data Portability & Backup
+Jika ingin orang lain menggunakan Hadi KeepFlow, bagikan source repository dan minta setiap orang membuat deployment pribadi mereka sendiri.
 
-From v1.2.8.3, replace:
-- `Index.html`
-- `AppScripts.html`
-- `NotesApi.gs`
+## 5. Upgrade instance yang sudah ada
 
-The page loads JSZip 3.10.1 from jsDelivr for ZIP creation and parsing, so the browser needs access to that CDN when using Backup/Restore.
-
-Then save the Apps Script project and deploy a new version. Open the deployed app online and wait for the initial cloud sync to finish before using Backup ZIP or Restore / Import ZIP.
-
-See `DATA-PORTABILITY-TEST.md` for the full test checklist.
-
-
-## v1.3.0.1 — Backup & Restore Progress UI
-
-If v1.3.0 is already installed, replace only:
-- `Index.html`
-- `AppStyles.html`
-- `AppScripts.html`
-
-No `.gs` file changes are required for this UI hotfix. Save the project and deploy a new version. Run section **F. Progress bar** in `DATA-PORTABILITY-TEST.md`.
-
-
-## v1.3.1 — Phase 3.2 Search & Discovery
-
-If v1.3.0.1 is already installed, replace only:
-- `Index.html`
-- `AppStyles.html`
-- `AppScripts.html`
-
-No `.gs` file changes are required. Save the project and deploy a new version. Existing notes, sync queue, category state, and backup archives remain compatible. Run `SEARCH-DISCOVERY-TEST.md`.
-
-
-## v1.3.2 — Phase 3.3 Note Organization
-
-If v1.3.1 is already installed, replace only:
-- `Index.html`
-- `AppStyles.html`
-- `AppScripts.html`
-
-No `.gs` file changes or migrations are required. Save the Apps Script project and deploy as a **New version**. Do not clear LocalStorage; existing notes, categories, tags, sync queue, and backup data are preserved. Run `NOTE-ORGANIZATION-TEST.md` after deployment.
-
-
-## v1.3.3 — Phase 3.4 Editor Enhancement
-If v1.3.2 is already installed, replace only:
-- `Index.html`
-- `AppStyles.html`
-- `AppScripts.html`
-
-No `.gs` changes or migrations are required. Save the Apps Script project and deploy as a **New version**. Do not clear LocalStorage; editor draft recovery, notes, categories, tags, and sync queue remain compatible. Run `EDITOR-ENHANCEMENT-TEST.md` after deployment.
-
-
-## v1.3.4 — Phase 3.5 Dashboard & Personalization
-
-If v1.3.3 is already installed, replace only these Apps Script HTML files:
+Untuk upgrade dari v1.3.4 ke v1.3.5, ganti hanya file HTML berikut:
 
 - `Index.html`
 - `AppStyles.html`
 - `AppScripts.html`
 
-Save the project and deploy as a new version. No `.gs` files, Drive folders, note metadata, or existing LocalStorage keys need to be changed. The new preferences use `hadi_keepflow_preferences_v1` and remain local to the current browser.
+Tidak ada perubahan backend `.gs` yang diperlukan untuk Phase 3.6 menurut changelog paket ini.
 
-After deployment, open Dashboard, configure the display name/theme/layout/default sort under the sliders icon, and verify the preference persists after reload. See `DASHBOARD-PERSONALIZATION-TEST.md`.
+Untuk upgrade dari versi yang lebih lama, jangan mengasumsikan daftar file di atas cukup. Ikuti changelog dan panduan instalasi versi perantara yang relevan. Buat backup sebelum upgrade.
 
+Setelah mengganti file:
 
-## v1.3.5 — Phase 3.6 Productivity Features
+1. Simpan project.
+2. Pilih **Deploy → Manage deployments**.
+3. Edit deployment yang digunakan.
+4. Pilih **New version**.
+5. Deploy dan buka kembali URL aplikasi.
+6. Jalankan checklist regresi.
 
-If upgrading from v1.3.4, replace only these Apps Script HTML files:
+**Jangan menghapus LocalStorage** sebagai langkah troubleshooting rutin. LocalStorage dapat berisi draft dan operasi sinkronisasi yang belum selesai.
 
-- `Index.html`
-- `AppStyles.html`
-- `AppScripts.html`
+## 6. Backup dan restore
 
-No `.gs` changes, Drive changes, or migrations are required. Save the project and deploy as a **New version**. Do not clear LocalStorage. Existing notes and editor drafts remain compatible. Test templates and checklists using `PRODUCTIVITY-FEATURES-TEST.md`.
+- Gunakan fitur Backup ZIP di aplikasi secara berkala.
+- Simpan file backup di lokasi pribadi yang aman.
+- Jangan commit backup ZIP ke GitHub.
+- Uji proses restore menggunakan salinan data uji sebelum mengandalkannya untuk pemulihan.
+- Restore/import bersifat merge-oriented sesuai implementasi versi ini; baca `DATA-PORTABILITY-TEST.md`.
+
+## 7. Troubleshooting awal
+
+| Gejala | Pemeriksaan awal |
+|---|---|
+| Aplikasi tidak terbuka | Periksa deployment URL dan versi deployment |
+| Otorisasi gagal | Pastikan akun memiliki akses Apps Script dan Google Drive |
+| Catatan tidak tersimpan | Periksa status sinkronisasi dan izin Drive |
+| Backup ZIP gagal | Pastikan browser dapat memuat JSZip dari CDN |
+| Ikon atau styling tidak tampil | Periksa koneksi ke CDN Font Awesome/Tailwind |
+| Konflik versi | Muat ulang data cloud dan ikuti alur resolusi konflik; jangan menimpa versi cloud secara paksa |
+
+## 8. Pengujian setelah deployment
+
+Mulai dari:
+
+1. `TEST-CHECKLIST.md`
+2. `SYNC-QUEUE-TEST.md`
+3. `OFFLINE-RECONCILIATION-TEST.md`
+4. `BACKEND-SECURITY-TEST.md`
+5. `CONFLICT-VERSION-TEST.md`
+6. `DATA-PORTABILITY-TEST.md`
+7. `PRODUCTIVITY-FEATURES-TEST.md`
+
+Lanjutkan dengan test guide lain sesuai fitur yang digunakan.
+
+Pengujian manual terhadap Apps Script dan Google Drive tetap harus dilakukan oleh pemilik deployment. Pemeriksaan source code saja tidak dapat membuktikan perilaku live.
