@@ -57,3 +57,9 @@ Checklist ini adalah rencana pengujian manual, bukan bukti bahwa seluruh skenari
 - [ ] Jalankan `MAINTAINABILITY-TEST.md`.
 - [ ] Pastikan seluruh file `.gs` dan HTML partial tersedia dengan nama tepat.
 - [ ] Pastikan tidak ada fungsi duplikat yang tertinggal di project Apps Script.
+
+
+## Phase 3.7.4 — Integration & Reliability
+
+- [ ] Run `node tests/phase-3.7.4-regression.test.js`.
+- [ ] Complete `PHASE-3.7.4-INTEGRATION-RELIABILITY-TEST.md` in a separate Apps Script test deployment.

@@ -2,7 +2,7 @@
 
 ## Scope
 
-This report covers the uploaded Phase 3.7.1 development package and the Phase 3.7.2 source changes:
+This report covers the v1.3.6-dev source through Phase 3.7.4:
 - Apps Script backend (`Code.gs`, `DriveStorage.gs`, `NotesApi.gs`, `SyncOperations.gs`).
 - Frontend (`Index.html`, `AppStyles.html`, `AppScripts.html`).
 - README, roadmap, changelog, and phase test guides.
@@ -78,3 +78,23 @@ Run `TEMPORARY-INBOX-MIGRATION-TEST.md` in a test deployment and save a fresh ba
 - Local Markdown link scan found no broken relative links.
 
 Live Apps Script and Google Drive behavior remains unverified; use `CATEGORY-MANAGEMENT-TEST.md` in a dedicated test deployment.
+
+
+## Phase 3.7.4 — Integration & Reliability
+
+### Source changes
+
+- `getNotes()` and `getBackupSnapshot()` now prefer the storage-root representation when the same Drive file is temporarily visible through both the root and a former category folder.
+- `saveNote()` resolves category folders case-insensitively and returns the canonical Drive folder name, preventing case-only duplicate category folders during restore or stale/imported writes.
+- The frontend adopts acknowledged canonical category casing only when the local category still matches the acknowledged save, preserving newer local edits.
+- Added an integration/reliability test guide covering workspace filters, search, dashboard, category lifecycle, interrupted moves, offline queue, conflicts, and backup/restore.
+
+### Validation performed
+
+- Backend `.gs` sources concatenated to a temporary `.js` file passed `node --check`.
+- JavaScript extracted from `AppScripts.html` passed `node --check`.
+- Repeatable `node tests/phase-3.7.4-regression.test.js` mock regression checks passed for case-insensitive category save, Inbox-first de-duplication in `getNotes()`, and Inbox-first de-duplication in backup snapshots.
+- `Index.html` contains 117 unique IDs with no duplicates; all 195 literal `getElementById()` references resolve.
+- Local Markdown relative-link scan found no broken links.
+
+Live Apps Script, browser, multi-device/offline, and Google Drive verification remains pending. Run `PHASE-3.7.4-INTEGRATION-RELIABILITY-TEST.md` in a separate test deployment before production use.

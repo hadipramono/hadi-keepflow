@@ -4,7 +4,7 @@
 
 Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Drive. The browser provides the interface, local drafts, preferences, search, and an offline synchronization queue.
 
-> **Stable release: v1.3.5. Current development snapshot: v1.3.6-dev — Phase 3.7.3 (Category Management).**
+> **Stable release: v1.3.5. Current development snapshot: v1.3.6-dev — Phase 3.7.4 (Integration & Reliability).**
 > The development snapshot includes Temporary Inbox storage, a backup-gated legacy `Umum` migration, and category create/rename/delete operations that preserve note files.
 
 ## Project status
@@ -149,6 +149,9 @@ The repository contains manual test guides for:
 - Temporary Inbox and legacy migration (**[TEMPORARY-INBOX-MIGRATION-TEST.md](TEMPORARY-INBOX-MIGRATION-TEST.md)**)
 - Category management (**[CATEGORY-MANAGEMENT-TEST.md](CATEGORY-MANAGEMENT-TEST.md)**)
 - Phase 3.7.3 implementation notes (**[PHASE-3.7.3-IMPLEMENTATION.md](PHASE-3.7.3-IMPLEMENTATION.md)**)
+- Phase 3.7.4 integration & reliability (**[PHASE-3.7.4-IMPLEMENTATION.md](PHASE-3.7.4-IMPLEMENTATION.md)**)
+- Phase 3.7.4 manual regression checklist (**[PHASE-3.7.4-INTEGRATION-RELIABILITY-TEST.md](PHASE-3.7.4-INTEGRATION-RELIABILITY-TEST.md)**)
+- Phase 3.7.4 Node mock regression test (`node tests/phase-3.7.4-regression.test.js`)
 - Phase 3.7.2 implementation notes (**[PHASE-3.7.2-IMPLEMENTATION.md](PHASE-3.7.2-IMPLEMENTATION.md)**)
 
 Start with **[TEST-CHECKLIST.md](TEST-CHECKLIST.md)** and then run the relevant phase-specific test documents.
@@ -157,7 +160,7 @@ Static JavaScript syntax checks can catch parsing errors, but they do not prove 
 
 ## Roadmap
 
-See **[ROADMAP.md](ROADMAP.md)**. Phases 3.7.1, 3.7.2, and 3.7.3 are implemented in this development snapshot. The deployer must create a fresh backup, run the legacy migration from the Data & Backup section, and complete the manual migration checklist before treating the data migration as verified.
+See **[ROADMAP.md](ROADMAP.md)**. Phases 3.7.1 through 3.7.4 are implemented in source in this development snapshot. Live verification is still required: deploy to a separate test Apps Script project, run the phase-specific regression checklists, and verify Google Drive operations before using the changes with important data.
 
 ## Contributing
 

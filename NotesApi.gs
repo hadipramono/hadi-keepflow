@@ -23,7 +23,12 @@ function getNotes() {
     // A partially completed Drive move can briefly expose the same file through
     // both parents. De-duplicate by immutable Drive file ID.
     const unique = new Map();
-    result.forEach(note => unique.set(String(note.id), note));
+    // Root files are collected first. Prefer that representation when a Drive
+    // move is interrupted and the same file temporarily has two parents.
+    result.forEach(note => {
+      const id = String(note.id);
+      if (!unique.has(id)) unique.set(id, note);
+    });
     return Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
   } finally {
     lock.releaseLock();
@@ -53,7 +58,12 @@ function getBackupSnapshot() {
     }
 
     const unique = new Map();
-    result.forEach(note => unique.set(String(note.id), note));
+    // Prefer storage-root (Inbox) when a partially completed move exposes
+    // one Drive file through both storage/ and its former category folder.
+    result.forEach(note => {
+      const id = String(note.id);
+      if (!unique.has(id)) unique.set(id, note);
+    });
     const notes = Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
     const categoryList = Array.from(categories).sort((a, b) => a.localeCompare(b, 'id'));
     return {
@@ -527,7 +537,14 @@ function saveNote(note, operationId) {
       }
     }
 
-    const folder = validated.category ? getOrCreateSubFolder(storage, validated.category) : storage;
+    // Resolve categories case-insensitively, matching category management.
+    // This is especially important for ZIP restore and stale/imported payloads:
+    // never create a second folder that differs only by letter casing.
+    const categoryFolder = validated.category
+      ? (findCategoryFolderCaseInsensitive(storage, validated.category) || storage.createFolder(validated.category))
+      : null;
+    const folder = categoryFolder || storage;
+    const effectiveCategory = categoryFolder ? categoryFolder.getName() : '';
     const fileName = buildUniqueFileName(folder, validated.title, file ? file.getId() : null);
     const now = new Date().toISOString();
     const metadata = {
@@ -558,7 +575,7 @@ function saveNote(note, operationId) {
         id: file.getId(),
         title: fileName.replace(/\.md$/i, ''),
         content: validated.content,
-        category: validated.category,
+        category: effectiveCategory,
         isPinned: metadata.isPinned,
         isArchived: metadata.isArchived,
         tags: metadata.tags,

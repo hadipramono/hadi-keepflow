@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.3 Category Management
+    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.4 Integration & Reliability
     let notes = [];
     let currentFilter = 'all';
     let activeSection = 'dashboard';
@@ -495,17 +495,36 @@
 
       // Advance the cloud baseline and replace temporary identity when needed.
       // Preserve current local fields because the user may have edited meanwhile.
-      notes = notes.map(note =>
-        String(note.id) === oldKey
-          ? { ...note, id: newKey, baseUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt }
-          : note
-      );
+      notes = notes.map(note => {
+        if (String(note.id) !== oldKey) return note;
+        const localCategory = normalizeNoteCategory(note.category);
+        const savedCategory = normalizeNoteCategory(savedNote.category);
+        return {
+          ...note,
+          id: newKey,
+          // Adopt the Drive's canonical category casing only when the local
+          // category still matches the acknowledged operation. A newer local
+          // category change must remain untouched.
+          category: localCategory.toLocaleLowerCase() === savedCategory.toLocaleLowerCase()
+            ? savedCategory
+            : note.category,
+          baseUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt
+        };
+      });
 
-      lastObservedNotes = lastObservedNotes.map(note =>
-        String(note.id) === oldKey
-          ? { ...note, id: newKey, baseUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt }
-          : note
-      );
+      lastObservedNotes = lastObservedNotes.map(note => {
+        if (String(note.id) !== oldKey) return note;
+        const localCategory = normalizeNoteCategory(note.category);
+        const savedCategory = normalizeNoteCategory(savedNote.category);
+        return {
+          ...note,
+          id: newKey,
+          category: localCategory.toLocaleLowerCase() === savedCategory.toLocaleLowerCase()
+            ? savedCategory
+            : note.category,
+          baseUpdatedAt: savedNote.baseUpdatedAt || savedNote.updatedAt
+        };
+      });
 
       // Advance the baseline for later queued operations on the same note.
       // Preserve each operation's content snapshot; update only its identity/version.

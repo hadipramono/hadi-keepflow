@@ -6,7 +6,7 @@ This document distinguishes implemented code from work that still requires deplo
 
 - Stable public release: **v1.3.5**
 - Current development snapshot: **v1.3.6-dev**
-- Current workstream: **Phase 3.7.3 — Category Management**
+- Current workstream: **Phase 3.7.4 — Integration & Reliability**
 
 ## Product direction
 
@@ -64,12 +64,14 @@ Hadi KeepFlow is evolving into a Personal Knowledge Management (PKM) system whil
 
 ### 3.7.4 — Integration & Reliability
 
-**Planned.**
+**Source implementation complete; live integration verification pending.**
 
-- Search and dashboard integration.
-- Offline queue and conflict handling.
-- Backup/restore compatibility.
-- Regression testing across migration, category assignment, and archive behavior.
+- Hardened duplicate-file resolution during interrupted Drive moves; storage-root representation wins for Inbox.
+- Backup snapshot applies the same recovery rule.
+- Note saves resolve category folders case-insensitively and return canonical folder names.
+- Frontend synchronization adopts canonical category casing without overwriting newer local edits.
+- Reviewed Search, Dashboard, Inbox, All Notes, Pinned, Archive, Categories, Tags, Sync Queue, conflict handling, and Backup/Restore integration.
+- Added `PHASE-3.7.4-INTEGRATION-RELIABILITY-TEST.md`; test deployment and live Drive checks remain pending.
 
 ## Migration safety notes
 

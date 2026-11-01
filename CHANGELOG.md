@@ -54,3 +54,12 @@ See `CHANGELOG-v1.3.5-phase-3.6.md`.
 - Kept categories containing unsupported files or nested folders in place; no unrelated content is trashed.
 - Updated the category UI to expose rename and delete actions for categories containing notes.
 - Structural category changes require online state and a clean synchronization queue.
+
+
+## v1.3.6-dev — Phase 3.7.4: Integration & Reliability
+
+- Prefer the storage-root representation when de-duplicating notes exposed through both Inbox and a former category parent during interrupted Drive moves.
+- Apply the same Inbox-first recovery rule to atomic backup snapshots.
+- Resolve note-save destinations case-insensitively to prevent duplicate category folders that differ only by capitalization.
+- Return canonical Drive category names from note saves and reconcile acknowledged local category casing safely.
+- Add integration/reliability documentation and a manual regression checklist for workspace views, offline sync, conflicts, migration, and backup/restore.
