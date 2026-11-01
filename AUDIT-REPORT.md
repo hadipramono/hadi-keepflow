@@ -1,4 +1,4 @@
-# Source Audit Report — Hadi KeepFlow v1.3.5
+# Source Audit Report — Hadi KeepFlow v1.3.6-dev
 
 ## Scope
 
@@ -27,7 +27,7 @@ The application has no application-level authentication, per-user authorization,
 
 The backend's Drive ownership validation limits file operations to the KeepFlow storage tree, but it does not identify which human is invoking the application.
 
-### Temporary Inbox is not implemented
+### Uncategorized storage migration is not implemented
 
 The v1.3.5 code still treats `Umum` as the default category:
 - `validateNotePayload()` defaults missing category values to `Umum`.
@@ -35,11 +35,11 @@ The v1.3.5 code still treats `Umum` as the default category:
 - The frontend uses `note.category || 'Umum'` in multiple places.
 - The category API treats `Umum` as a built-in category.
 
-The planned Temporary Inbox therefore requires a deliberate compatibility design in Phase 3.7. It must not be described as an existing v1.3.5 feature.
+The v1.3.5 baseline therefore required a deliberate compatibility design. Phase 3.7.1 now presents legacy `Umum` notes in the Inbox view, but the uncategorized storage model and data migration remain unimplemented until Phase 3.7.2.
 
-### License decision remains open
+### License
 
-No license was supplied in the uploaded package. A public GitHub repository without a license does not grant general rights to use, modify, or redistribute the source. `README.md` records this clearly and recommends considering MIT if permissive reuse is intended. The project owner must approve a license before describing the project as open source.
+The repository includes an MIT `LICENSE` file and the README identifies the project as MIT-licensed. The license choice was approved by the project owner before this development snapshot.
 
 ### External runtime dependencies
 
@@ -56,6 +56,14 @@ Older changelogs and test guides were retained as project history. Some document
 - A static comparison found no literal `getElementById('...')` references missing from IDs in `Index.html`.
 - Basic scans did not find common AWS, Google API key, GitHub token, or private-key patterns in the uploaded source.
 
+### Phase 3.7.1 static checks
+
+- `node --check` passed for `AppScripts.html` JavaScript and all four `.gs` files.
+- `Index.html` contains 115 unique IDs; no duplicate IDs were found.
+- All 107 literal `getElementById()` targets in the frontend script resolve to an ID in `Index.html`.
+- Eight focused helper cases passed for Inbox classification and archive-state normalization.
+- No backend `.gs` file was changed in this workstream.
+
 ## Validation not performed
 
 This audit did not deploy the project to Google Apps Script and did not access the user's Google Drive. It does not prove:
@@ -70,6 +78,21 @@ Run the manual test guides in a dedicated test deployment before replacing a pro
 
 ## Remaining owner decisions
 
-1. Select and approve a repository license (MIT is one possible choice).
-2. Decide whether to keep the current CDN dependencies or introduce a more controlled asset strategy.
-3. Capture sanitized screenshots if desired for the GitHub README.
+1. Decide whether to keep the current CDN dependencies or introduce a more controlled asset strategy.
+2. Capture sanitized screenshots if desired for the GitHub README.
+
+## Phase 3.7.1 implementation note
+
+Files changed in this workstream:
+- `Index.html`: reorganized sidebar navigation and added Inbox navigation/count badge.
+- `AppScripts.html`: added transitional Inbox filtering, count, empty state, and Inbox labels for legacy `Umum`; excluded legacy Inbox notes from regular category navigation and dashboard category counts.
+- `README.md`, `ROADMAP.md`, and `CHANGELOG.md`: updated development status and compatibility notes.
+- `WORKSPACE-NAVIGATION-TEST.md`: added a manual browser/Apps Script regression checklist.
+
+No backend `.gs` file or Drive storage operation was changed in Phase 3.7.1.
+
+## Phase 3.7.1 implementation note
+
+The current development snapshot adds Workspace navigation and an Inbox view. Until Phase 3.7.2, Inbox is a presentation layer over notes whose legacy category is `Umum` (including missing/blank category values). It does not move Drive files, alter note metadata, or change backend storage semantics.
+
+The source-level checks for this development snapshot should be rerun after each subsequent phase. Apps Script deployment, browser behavior, and live Drive operations still require manual testing by the project owner.

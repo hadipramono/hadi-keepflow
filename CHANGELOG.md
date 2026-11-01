@@ -2,6 +2,17 @@
 
 This file summarizes notable project releases. Detailed phase notes remain in the corresponding `CHANGELOG-*.md` files.
 
+## v1.3.6-dev — Phase 3.7.1: Workspace Navigation
+
+- Reorganized the sidebar into Workspace, Organization, and Data & Backup areas.
+- Added Inbox navigation with an active uncategorized/legacy `Umum` note count.
+- Added Inbox-specific filtering and empty-state messaging.
+- Displayed legacy `Umum` notes as Inbox in note cards and category selectors.
+- Kept the existing Drive folder layout and stored note metadata unchanged; migration is deferred to Phase 3.7.2.
+- Kept Dashboard, All Notes, Pinned, Categories, Tags, Archive, and backup/restore entry points.
+
+This is a development snapshot, not a published stable release. Full Temporary Inbox storage semantics are not included yet.
+
 ## Repository preparation (documentation and security defaults)
 
 - Reworked GitHub-facing README and installation guide.

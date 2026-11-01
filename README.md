@@ -4,8 +4,8 @@
 
 Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Drive. The browser provides the interface, local drafts, preferences, search, and an offline synchronization queue.
 
-> **Current source package: v1.3.5 — Phase 3.6 (Productivity Features).**
-> Phase 3.7 (Workspace & Category Architecture, including Temporary Inbox) is a planned phase and is **not implemented in this package**.
+> **Stable release: v1.3.5. Current development snapshot: v1.3.6-dev — Phase 3.7.1 (Workspace Navigation).**
+> This development snapshot adds the new workspace navigation and an Inbox view. The full Temporary Inbox data model and migration are still planned for Phase 3.7.2.
 
 ## Project status
 
@@ -21,7 +21,8 @@ Hadi KeepFlow stores notes as Markdown-compatible files in the user's Google Dri
 | Editor formatting and drafts | Implemented |
 | Dashboard and local preferences | Implemented |
 | Templates and checklists | Implemented |
-| Temporary Inbox | **Planned for Phase 3.7** |
+| Inbox navigation/view | Implemented in v1.3.6-dev; temporarily backed by legacy `Umum` notes |
+| Uncategorized data migration | Planned for Phase 3.7.2 |
 | Note linking and backlinks | Planned |
 | Multi-user collaboration | Not supported |
 | AI / vector search | Not included |
@@ -54,7 +55,7 @@ Google Drive
 └── My Drive/apps/KeepFlow/storage/
     ├── <category>/
     │   └── <note>.md
-    └── <note>.md       Root-level notes are read as "Umum"
+    └── <note>.md       Root-level notes are read as "Umum" 
 ```
 
 ### Source files
@@ -77,6 +78,7 @@ All `.gs` files share the Apps Script global namespace. Keep public server funct
 - Notes are stored as `.md` files, with JSON metadata wrapped in the `---JSON---` delimiter at the start of the file.
 - The current backend stores notes in a category folder. Notes directly under `storage/` are interpreted as category `Umum`.
 - The current frontend/backend use `Umum` as the default category when a note has no category value. This is the existing v1.3.5 behavior; it is **not** the planned Temporary Inbox behavior.
+- In the v1.3.6-dev Phase 3.7.1 interface, legacy `Umum` notes are displayed in the Inbox view and labelled as Inbox. Their Drive location and stored category value are unchanged; the data migration is reserved for Phase 3.7.2.
 - LocalStorage is used for local note cache, pending sync operations, editor draft recovery, search history, category state, and user preferences.
 - Do not clear LocalStorage during upgrades unless a migration guide explicitly instructs you to do so.
 
@@ -132,6 +134,8 @@ The repository contains manual test guides for:
 - Editor behavior
 - Dashboard and personalization
 - Templates and checklists
+- Workspace navigation and transitional Inbox view (**[WORKSPACE-NAVIGATION-TEST.md](WORKSPACE-NAVIGATION-TEST.md)**)
+- Phase 3.7.1 implementation notes (**[PHASE-3.7.1-IMPLEMENTATION.md](PHASE-3.7.1-IMPLEMENTATION.md)**)
 
 Start with **[TEST-CHECKLIST.md](TEST-CHECKLIST.md)** and then run the relevant phase-specific test documents.
 
@@ -139,15 +143,9 @@ Static JavaScript syntax checks can catch parsing errors, but they do not prove 
 
 ## Roadmap
 
-See **[ROADMAP.md](ROADMAP.md)**. The next planned phase is:
+See **[ROADMAP.md](ROADMAP.md)**. Phase 3.7.1 (Workspace Navigation) is implemented in the current development snapshot. The next workstream is **Phase 3.7.2 — Temporary Inbox**, which will implement the uncategorized storage model and migrate legacy `Umum` notes safely.
 
-**Phase 3.7 — Workspace & Category Architecture**
-- Workspace navigation improvements.
-- Temporary Inbox for notes that have not yet been assigned a category.
-- Category management and safe reassignment.
-- Integration with search, dashboard, offline queue, and backup/restore.
-
-The Temporary Inbox is a planned behavior, not a feature of v1.3.5.
+The current Inbox navigation is a transitional presentation of legacy `Umum` notes. It does not yet change their Drive location or stored category metadata.
 
 ## Contributing
 

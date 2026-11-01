@@ -2,7 +2,9 @@
 
 This document distinguishes implemented functionality from planned work. A roadmap item is not a feature commitment until its implementation is merged and tested.
 
-## Current release: v1.3.5
+## Stable release: v1.3.5
+
+Current development snapshot: v1.3.6-dev.
 
 Phase 3.6 — Productivity Features:
 - Reusable note templates.
@@ -10,9 +12,9 @@ Phase 3.6 — Productivity Features:
 - Checklist progress display.
 - Existing Google Drive and LocalStorage synchronization architecture retained.
 
-## Next: Phase 3.7 — Workspace & Category Architecture
+## In progress: Phase 3.7 — Workspace & Category Architecture
 
-**Status: planned; not included in v1.3.5.**
+**Stable release: v1.3.5. Development snapshot: v1.3.6-dev.**
 
 ### Product decision: Temporary Inbox
 
@@ -30,8 +32,10 @@ Expected behavior:
 ### Implementation workstreams
 
 1. **3.7.1 — Workspace Navigation**
-   - Dashboard, Inbox, All Notes, Categories, Tags, Archive.
-   - Keep navigation views separate from Drive folder structure.
+   - **Implemented in this development snapshot:** Dashboard, Inbox, All Notes, Pinned, Categories, Tags, Archive, and Data & Backup navigation.
+   - Inbox count and Inbox-specific empty state.
+   - Legacy `Umum` notes are presented in Inbox without changing Drive files or stored metadata.
+   - Navigation views remain separate from Drive folder structure.
 2. **3.7.2 — Temporary Inbox**
    - Explicit uncategorized state.
    - Inbox count, quick assignment, bulk assignment, and archive actions.
@@ -43,9 +47,13 @@ Expected behavior:
    - Offline queue and conflict handling.
    - Backup/restore compatibility and regression testing.
 
-### Compatibility constraint
+### Compatibility and migration decision
 
-The current v1.3.5 implementation uses `Umum` as its default category and stores root-level Drive notes as `Umum`. Phase 3.7 must explicitly design a backward-compatible transition from this behavior. Do not simply reinterpret every existing `Umum` note as uncategorized without a migration/compatibility decision.
+The project owner approved converting all legacy `Umum` notes into uncategorized Inbox notes in Phase 3.7.2. Until that migration is implemented:
+- v1.3.6-dev Phase 3.7.1 displays legacy `Umum` notes through the Inbox view.
+- The underlying Drive folder and metadata remain unchanged.
+- Other categories, note IDs, content, and metadata are untouched.
+- Do not describe the full uncategorized data model as implemented yet.
 
 ## Later planned phases
 

@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.5 — Phase 3.6 Productivity Features
+    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.1 Workspace Navigation
     let notes = [];
     let currentFilter = 'all';
     let activeSection = 'dashboard';
@@ -124,9 +124,12 @@
       const name = String(categoryName || '').replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
       if (!name) return;
       if (name.toLocaleLowerCase() === 'umum') {
-        currentCategory = 'Umum';
-        currentFilter = 'category';
+        // Transitional compatibility: legacy "Umum" notes are surfaced in Inbox
+        // until Phase 3.7.2 migrates their Drive storage representation.
+        currentCategory = null;
+        currentFilter = 'inbox';
         currentTag = null;
+        activeSection = 'notes';
         render();
         return;
       }
@@ -841,6 +844,8 @@
         button.classList.toggle('font-medium', active);
         button.classList.toggle('text-gray-600', !active);
         button.classList.toggle('dark:text-gray-400', !active);
+        if (active) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
       });
     }
 
@@ -851,7 +856,8 @@
       const emptyState = document.getElementById('notes-empty-state');
       const hasViewFilter = currentFilter !== 'all' || currentCategory || currentTag || Boolean(searchQuery.trim()) || datePreset !== 'all';
       let label = 'Semua Catatan';
-      if (currentFilter === 'pinned') label = 'Disematkan';
+      if (currentFilter === 'inbox') label = 'Inbox';
+      else if (currentFilter === 'pinned') label = 'Disematkan';
       else if (currentFilter === 'archive') label = 'Arsip';
       else if (currentCategory) label = currentCategory;
       else if (currentTag) label = `Label: ${currentTag}`;
@@ -864,8 +870,14 @@
       emptyState.classList.toggle('hidden', filteredCount !== 0);
       if (filteredCount === 0) {
         const searching = Boolean(searchQuery.trim());
-        document.getElementById('empty-state-title').textContent = searching ? 'Tidak ada hasil pencarian' : 'Belum ada catatan di tampilan ini';
-        document.getElementById('empty-state-message').textContent = searching ? 'Coba kata kunci lain atau hapus filter.' : 'Anda dapat membuat catatan baru atau memilih tampilan lain.';
+        document.getElementById('empty-state-title').textContent = searching
+          ? 'Tidak ada hasil pencarian'
+          : (currentFilter === 'inbox' ? 'Inbox kosong' : 'Belum ada catatan di tampilan ini');
+        document.getElementById('empty-state-message').textContent = searching
+          ? 'Coba kata kunci lain atau hapus filter.'
+          : (currentFilter === 'inbox'
+            ? 'Catatan yang belum dikategorikan akan muncul di sini. Anda juga dapat membuat catatan baru.'
+            : 'Anda dapat membuat catatan baru atau memilih tampilan lain.');
       }
       updateActiveNavigation();
       const dateLabel = document.getElementById('date-filter-label');
@@ -927,8 +939,8 @@
             categories = categories.filter(item => item !== category);
             pendingCategoryCreates = pendingCategoryCreates.filter(item => item !== category);
             if (currentCategory === category) {
-              currentCategory = 'Umum';
-              currentFilter = 'category';
+              currentCategory = null;
+              currentFilter = 'inbox';
             }
             persistCategoryState();
             reconcileCloudCategories(response.categories || ['Umum']);
@@ -1194,10 +1206,13 @@
         return `<button type="button" data-dashboard-note="${escapeHTML(String(note.id))}" class="w-full text-left flex items-start gap-3 p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition border border-transparent hover:border-gray-100 dark:hover:border-gray-700"><span class="mt-0.5 text-blue-500"><i class="fa-regular fa-note-sticky"></i></span><span class="min-w-0 flex-1"><strong class="block text-sm text-gray-800 dark:text-gray-100 truncate">${escapeHTML(title)}</strong><span class="block text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2">${escapeHTML(snippet || 'Catatan kosong')}</span></span><span class="text-[10px] text-gray-400 whitespace-nowrap">${escapeHTML(formatDate(note.updatedAt || note.createdAt))}</span></button>`;
       }).join('') : '<p class="text-sm text-gray-400 px-2 py-3">Belum ada catatan. Buat catatan pertama Anda.</p>';
 
-      const categoryCounts = new Map([...new Set([...DEFAULT_CATEGORIES, ...categories])].map(category => [String(category), 0]));
+      const categoryCounts = new Map([...new Set([...DEFAULT_CATEGORIES, ...categories])]
+        .filter(category => String(category).toLocaleLowerCase() !== 'umum')
+        .map(category => [String(category), 0]));
       active.forEach(note => {
-        const category = String(note.category || 'Umum');
-        categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+        if (isInboxNote(note)) return;
+        const category = String(note.category).trim();
+        if (category) categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
       });
       const categoryRows = [...categoryCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
       const maxCount = Math.max(1, ...categoryRows.map(row => row[1]));
@@ -1210,6 +1225,7 @@
       return notes.filter(note => {
         if (!noteMatchesSearch(note, terms)) return false;
         if (!matchesDateFilter(note.updatedAt)) return false;
+        if (currentFilter === 'inbox') return isInboxNote(note) && !isArchivedNote(note);
         if (currentFilter === 'pinned') return note.isPinned && !isArchivedNote(note);
         if (currentFilter === 'archive') return isArchivedNote(note);
         if (currentCategory) return (note.category || 'Umum') === currentCategory && !isArchivedNote(note);
@@ -1296,6 +1312,8 @@
       document.getElementById('dashboard-nav').classList.toggle('dark:text-blue-400', dashboardVisible);
       document.getElementById('dashboard-nav').classList.toggle('text-gray-600', !dashboardVisible);
       document.getElementById('dashboard-nav').classList.toggle('dark:text-gray-400', !dashboardVisible);
+      if (dashboardVisible) document.getElementById('dashboard-nav').setAttribute('aria-current', 'page');
+      else document.getElementById('dashboard-nav').removeAttribute('aria-current');
       renderDashboard();
       const filtered = getFilteredNotes();
       const existingIds = new Set(notes.map(note => String(note.id)));
@@ -1304,8 +1322,8 @@
       notesGrid.className = isListView ? 'view-list' : 'view-grid';
       pinnedGrid.className = isListView ? 'view-list' : 'view-grid';
       
-      if (currentFilter === 'pinned') {
-        // Dedicated pinned view: show only pinned, non-archived notes.
+      if (currentFilter === 'pinned' || currentFilter === 'inbox') {
+        // Dedicated views show all matching notes without All Notes pin grouping.
         pinnedSection.classList.add('hidden');
         othersTitle.classList.add('hidden');
         notesGrid.innerHTML = filtered.map(createCardHTML).join('');
@@ -1331,6 +1349,7 @@
         notesGrid.innerHTML = others.map(createCardHTML).join('');
       }
 
+      renderInboxCount();
       renderCategories();
       renderTags();
       renderBulkActions(filtered);
@@ -1359,7 +1378,9 @@
       ])];
       categorySelect.innerHTML = '<option value="">Pindah kategori...</option>' +
         availableCategories.map(category =>
-          '<option value="' + escapeHTML(category) + '">' + escapeHTML(category) + '</option>'
+          '<option value="' + escapeHTML(category) + '">' +
+          (String(category).toLocaleLowerCase() === 'umum' ? 'Inbox' : escapeHTML(category)) +
+          '</option>'
         ).join('');
       categorySelect.value = [...categorySelect.options].some(option => option.value === currentValue) ? currentValue : '';
       const selectedNotes = notes.filter(note => selectedNoteIds.has(String(note.id)));
@@ -1403,14 +1424,43 @@
         (typeof value === 'string' && ['true', '1'].includes(value.trim().toLowerCase()));
     }
 
+    // Phase 3.7.1 presents legacy "Umum" notes through the Inbox navigation.
+    // Their Drive folders and metadata are intentionally unchanged until Phase 3.7.2.
+    function isInboxNote(note) {
+      const category = String(note && note.category != null ? note.category : 'Umum').trim();
+      return !category || category.toLocaleLowerCase() === 'umum';
+    }
+
+    function getCategoryDisplayName(category) {
+      const value = String(category || 'Umum').trim();
+      return value.toLocaleLowerCase() === 'umum' ? 'Inbox' : value;
+    }
+
+    function renderInboxCount() {
+      const count = notes.filter(note => isInboxNote(note) && !isArchivedNote(note)).length;
+      const badge = document.getElementById('inbox-count');
+      if (badge) {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.setAttribute('aria-label', count + ' catatan di Inbox');
+        badge.classList.toggle('hidden', count === 0);
+      }
+    }
+
     function renderCategories() {
       const categoryCounts = new Map();
-      const activeCatsSet = new Set([...DEFAULT_CATEGORIES, ...categories]);
-      if (currentCategory) activeCatsSet.add(currentCategory);
+      const activeCatsSet = new Set([...DEFAULT_CATEGORIES, ...categories].filter(cat =>
+        String(cat).toLocaleLowerCase() !== 'umum'
+      ));
+      if (currentCategory && String(currentCategory).toLocaleLowerCase() !== 'umum') {
+        activeCatsSet.add(currentCategory);
+      }
 
-      // One pass replaces the previous category-count nested filtering.
+      // Legacy "Umum" is represented by Inbox in the workspace navigation,
+      // not as a regular category. Other categories retain their existing data.
       notes.forEach(note => {
-        const category = note.category || 'Umum';
+        if (isInboxNote(note)) return;
+        const category = String(note.category).trim();
+        if (!category) return;
         activeCatsSet.add(category);
         categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
       });
@@ -1424,13 +1474,19 @@
           </div>
           <div class="flex items-center space-x-2">
             <span class="text-xs text-gray-400">${categoryCounts.get(cat) || 0}</span>
-            ${cat !== 'Umum' ? `<button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori"><i class="fa-solid fa-pen text-xs"></i></button>${(categoryCounts.get(cat) || 0) === 0 ? `<button data-category="${escapeHTML(cat)}" class="delete-category-btn text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1" title="Hapus Kategori Kosong"><i class="fa-solid fa-trash text-xs"></i></button>` : `<span class="text-gray-300 p-1" title="Kategori masih memiliki catatan"><i class="fa-solid fa-lock text-xs"></i></span>`}` : ''}
+            <button data-old-category="${escapeHTML(cat)}" class="edit-category-btn text-gray-400 hover:text-blue-500 opacity-0 group-hover:opacity-100 transition p-1" title="Ubah Nama Kategori" aria-label="Ubah kategori ${escapeHTML(cat)}"><i class="fa-solid fa-pen text-xs"></i></button>
+            ${(categoryCounts.get(cat) || 0) === 0
+              ? `<button data-category="${escapeHTML(cat)}" class="delete-category-btn text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1" title="Hapus Kategori Kosong" aria-label="Hapus kategori ${escapeHTML(cat)}"><i class="fa-solid fa-trash text-xs"></i></button>`
+              : `<span class="text-gray-300 p-1" title="Kategori masih memiliki catatan"><i class="fa-solid fa-lock text-xs"></i></span>`}
           </div>
         </div>
       `).join('');
 
-      modalCategorySelect.innerHTML = activeCats.map(cat => `
-        <option value="${escapeHTML(cat)}">📁 ${escapeHTML(cat)}</option>
+      // Keep the legacy storage value "Umum" as an Inbox-labelled editor option
+      // until the data migration in Phase 3.7.2 is implemented.
+      const editorCategories = ['Umum', ...activeCats.filter(cat => String(cat).toLocaleLowerCase() !== 'umum')];
+      modalCategorySelect.innerHTML = editorCategories.map(cat => `
+        <option value="${escapeHTML(cat)}">${cat.toLocaleLowerCase() === 'umum' ? '📥 Inbox' : '📁 ' + escapeHTML(cat)}</option>
       `).join('');
     }
 
@@ -1453,7 +1509,7 @@
           <div data-id="${safeId}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow transition cursor-pointer flex items-center justify-between gap-4 group">
             ${selectionMode ? `<input type="checkbox" data-note-id="${safeId}" class="note-select-checkbox h-4 w-4 shrink-0 accent-blue-600" aria-label="Pilih catatan ${escapeHTML(note.title || 'Tanpa Judul')}">` : ''}
             <div class="flex items-center space-x-3 truncate flex-1">
-              <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px] font-medium shrink-0"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
+              <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px] font-medium shrink-0"><i class="fa-solid ${isInboxNote(note) ? 'fa-inbox' : 'fa-folder'} mr-1"></i>${escapeHTML(getCategoryDisplayName(note.category))}</span>
               <span class="font-bold text-gray-900 dark:text-white text-sm shrink-0">${highlightSearchText(note.title || 'Tanpa Judul', searchQuery)}</span>
               <span class="text-gray-500 dark:text-gray-400 text-xs truncate">- ${highlightSearchText(plainContent, searchQuery)}</span>
             </div>
@@ -1473,7 +1529,7 @@
             ${selectionMode ? `<div class="flex justify-end mb-2"><input type="checkbox" data-note-id="${safeId}" class="note-select-checkbox h-4 w-4 accent-blue-600" aria-label="Pilih catatan ${escapeHTML(note.title || 'Tanpa Judul')}"></div>` : ''}
             <div>
               <div class="flex items-center justify-between mb-2">
-                <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-medium"><i class="fa-solid fa-folder mr-1"></i>${escapeHTML(note.category || 'Umum')}</span>
+                <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-md text-[10px] font-medium"><i class="fa-solid ${isInboxNote(note) ? 'fa-inbox' : 'fa-folder'} mr-1"></i>${escapeHTML(getCategoryDisplayName(note.category))}</span>
                 ${note.isArchived ? '<span class="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">Arsip</span>' : ''}
               </div>
               ${note.title ? `<h3 class="font-bold text-gray-900 dark:text-white mb-2 text-base">${highlightSearchText(note.title, searchQuery)}</h3>` : ''}
