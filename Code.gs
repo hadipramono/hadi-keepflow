@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.3.6-rc.1 — Phase 3.7.4
+ * Hadi KeepFlow v1.3.6 — Phase 3.7.4
  * Google Apps Script web entry point and shared utilities.
  * Backend modules: DriveStorage.gs, SyncOperations.gs, NotesApi.gs.
  * Storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md

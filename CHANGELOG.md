@@ -1,7 +1,7 @@
-# Changelog — v1.3.6-rc.1 (Phase 8 Final QA)
+# Changelog — v1.3.6
 
-- Menggabungkan source aplikasi tujuh file setelah perbaikan Phase 7.
-- Menetapkan metadata paket sebagai release candidate `1.3.6-rc.1`; target stabil tetap `1.3.6` setelah deployment/live checklist lulus.
-- Tidak menambahkan fitur atau mengubah arsitektur.
-- Menjalankan static checks dan Node mock regression yang tersedia.
-- Mencatat validasi live GAS/Drive dan perangkat nyata sebagai gerbang sebelum label stable.
+- Prepared the stable version metadata from the latest complete Phase 8 source snapshot.
+- Retained the Phase 7 dashboard rendering optimization.
+- Preserved Google Drive as the source of truth and LocalStorage for cache, draft, and offline queue.
+- No new product features or architectural changes.
+- Release QA findings, verification boundaries, and unresolved live gates are documented in `RELEASE-AUDIT.md` and `TEST-CHECKLIST.md`.

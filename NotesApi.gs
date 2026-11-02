@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.3.6-rc.1 backend module.
+ * Hadi KeepFlow v1.3.6 backend module.
  * Apps Script .gs files share one global namespace.
  */
 

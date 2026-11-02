@@ -1,22 +1,24 @@
-# Phase 8 Release Checklist
+# v1.3.6 QA and Release Checklist
 
-## Selesai secara lokal
+## Completed locally
 
-- [x] Source aplikasi 7 file hadir.
-- [x] Sintaks frontend dan backend lulus.
-- [x] Node mock regression Phase 3.7.4 lulus.
-- [x] 129 ID unik dan 120 literal `getElementById()` references lolos pemeriksaan.
-- [x] CSS brace balance dan fallback viewport lolos.
-- [x] Metadata versi kandidat konsisten.
-- [x] ZIP dapat dibuka dan checksum dicatat.
+- [x] Latest complete source snapshot includes frontend and four GAS backend files.
+- [x] Phase 8 source SHA-256 manifest verified.
+- [x] Existing Node mock regression harness passed (3 assertion groups).
+- [x] Frontend/backend syntax passed; 129 unique HTML IDs, 223 literal ID references with no missing IDs, CSS brace balance and viewport fallback checks passed; no RC1 markers remain in application source.
+- [x] Release ZIP integrity verified after packaging.
 
-## Wajib sebelum stable v1.3.6
+## Required before production deployment and stable tag
 
-- [ ] Deploy ke Apps Script uji terpisah dan verifikasi otorisasi.
-- [ ] Uji fungsi utama dan kategori terhadap Google Drive uji.
-- [ ] Uji migrasi legacy `Umum` dan pemulihan Drive move terputus.
-- [ ] Uji offline queue, commit-response loss, antrean lebih dari 7 hari, dan konflik multi-sesi.
-- [ ] Uji kegagalan receipt/PropertiesService setelah mutasi Drive.
-- [ ] Uji backup/restore.
-- [ ] Uji desktop/mobile serta browser yang didukung.
-- [ ] Periksa console/network dan pastikan tidak ada kehilangan/duplikasi/perubahan metadata.
+- [ ] Isolated Apps Script deployment and authorization review.
+- [ ] Core feature regression against test Google Drive.
+- [ ] Backup/restore, including malformed and oversized ZIP cases.
+- [ ] Offline queue/reload/reconnect and lost-response retry.
+- [ ] Retry of an operation older than seven days; verify no duplicate.
+- [ ] Two-session version conflicts and interrupted category move recovery.
+- [ ] PropertiesService failure after successful Drive mutation.
+- [ ] LocalStorage denied/full behavior for queue, categories, and templates.
+- [ ] Browser console/network review and small/medium/large data performance checks.
+- [ ] Supported desktop/mobile browser matrix and real-device checks.
+- [ ] Record evidence; confirm no data loss, unintended duplicate, or metadata change.
+- [ ] Only after all required checks pass: deploy stable v1.3.6 and create Git tag `v1.3.6`.
