@@ -39,6 +39,22 @@
   <?!= include('AppStyles'); ?>
 </head>
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans antialiased min-h-screen transition-colors duration-200">
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const updateViewportHeight = () => {
+        const viewport = window.visualViewport;
+        const height = viewport ? viewport.height : window.innerHeight;
+        root.style.setProperty('--keepflow-viewport-height', Math.round(height) + 'px');
+        root.style.setProperty('--keepflow-viewport-offset-top', Math.round(viewport ? viewport.offsetTop : 0) + 'px');
+      };
+      updateViewportHeight();
+      window.addEventListener('resize', updateViewportHeight, { passive: true });
+      window.addEventListener('orientationchange', updateViewportHeight, { passive: true });
+      if (window.visualViewport) window.visualViewport.addEventListener('resize', updateViewportHeight, { passive: true });
+      if (window.visualViewport) window.visualViewport.addEventListener('scroll', updateViewportHeight, { passive: true });
+    })();
+  </script>
 
   <!-- Global Loading Overlay -->
   <div id="global-loader" class="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white transition-opacity duration-300">
@@ -51,7 +67,7 @@
     </div>
   </div>
 
-  <div id="app" class="flex flex-col h-screen overflow-hidden">
+  <div id="app" class="flex flex-col overflow-hidden" style="height: var(--keepflow-viewport-height, 100vh); height: var(--keepflow-viewport-height, 100dvh);">
     <!-- Top Header -->
     <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-2 sm:px-4 gap-2 z-20 shrink-0">
       <div class="flex items-center space-x-3">
@@ -371,7 +387,7 @@
     </div>
 
     <!-- Formatting Toolbar -->
-    <div id="editor-toolbar" role="toolbar" aria-label="Pemformatan catatan" class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 flex flex-wrap items-center gap-1 shrink-0">
+    <div id="editor-toolbar" role="toolbar" aria-label="Pemformatan catatan" class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 flex flex-nowrap items-center gap-1 shrink-0 overflow-x-auto">
       <button type="button" data-command="undo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Urungkan (Ctrl+Z)" aria-label="Urungkan"><i class="fa-solid fa-rotate-left"></i></button>
       <button type="button" data-command="redo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Ulangi (Ctrl+Y)" aria-label="Ulangi"><i class="fa-solid fa-rotate-right"></i></button>
       <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>

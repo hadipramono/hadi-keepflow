@@ -175,6 +175,27 @@
       syncPendingCategoryCreates();
     }
 
+    let savedEditorRange = null;
+
+    function saveEditorSelection() {
+      const editor = document.getElementById('editor-content-editable');
+      const selection = window.getSelection();
+      if (!editor || !selection || !selection.rangeCount) return;
+      const range = selection.getRangeAt(0);
+      if (editor.contains(range.commonAncestorContainer)) savedEditorRange = range.cloneRange();
+    }
+
+    function restoreEditorSelection() {
+      const editor = document.getElementById('editor-content-editable');
+      const selection = window.getSelection();
+      if (!editor || !selection || !savedEditorRange) return false;
+      if (!editor.contains(savedEditorRange.commonAncestorContainer)) return false;
+      editor.focus({ preventScroll: true });
+      selection.removeAllRanges();
+      selection.addRange(savedEditorRange);
+      return true;
+    }
+
     function updateToolbarState() {
       document.querySelectorAll('.toolbar-btn').forEach(btn => {
         const cmd = btn.getAttribute('data-command');
@@ -236,9 +257,12 @@
       scheduleEditorDraftSave();
     }
 
+    document.addEventListener('selectionchange', saveEditorSelection);
+
     document.querySelectorAll('.toolbar-btn').forEach(btn => {
-      // Keep the content selection when a toolbar button is clicked.
-      btn.addEventListener('mousedown', event => event.preventDefault());
+      // Preserve selection on mouse and touch; mobile browsers may blur contenteditable.
+      btn.addEventListener('pointerdown', event => { saveEditorSelection(); if (event.pointerType === 'mouse') event.preventDefault(); });
+      btn.addEventListener('mousedown', event => { saveEditorSelection(); event.preventDefault(); });
       btn.addEventListener('click', function(event) {
         event.preventDefault();
         const cmd = this.getAttribute('data-command');
@@ -249,8 +273,9 @@
           insertEditorLink();
           return;
         }
-        editor.focus();
+        if (!restoreEditorSelection()) editor.focus({ preventScroll: true });
         document.execCommand(cmd, false, val);
+        saveEditorSelection();
         updateToolbarState();
         updateEditorMetrics();
         scheduleEditorDraftSave();
@@ -2050,8 +2075,12 @@
       updateModalActionStates(currentNote);
       updateEditorMetrics();
       editorModal.classList.remove('hidden');
-      modalContentEditable.focus();
+      savedEditorRange = null;
       updateToolbarState();
+      // Opening a note is a reading/navigation action on phones; do not summon the keyboard.
+      if (window.matchMedia('(min-width: 768px)').matches) {
+        window.requestAnimationFrame(() => modalContentEditable.focus({ preventScroll: true }));
+      }
     }
 
     function saveActiveNote() {
@@ -2757,9 +2786,19 @@
       element.addEventListener('input', scheduleEditorDraftSave);
       element.addEventListener('change', scheduleEditorDraftSave);
     });
-    window.addEventListener('beforeunload', () => {
-      if (!editorModal.classList.contains('hidden') && editorDraftDirty) persistEditorDraft();
+    function flushEditorDraft() {
+      if (!editorModal.classList.contains('hidden') && (editorDraftDirty || draftSaveTimer)) {
+        if (draftSaveTimer) clearTimeout(draftSaveTimer);
+        draftSaveTimer = null;
+        persistEditorDraft();
+      }
+    }
+
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushEditorDraft();
     });
+    window.addEventListener('pagehide', flushEditorDraft);
+    window.addEventListener('beforeunload', flushEditorDraft);
 
     document.getElementById('modal-pin-btn').addEventListener('click', () => {
       if (!activeNoteId) return;
@@ -2789,8 +2828,12 @@
 
     document.getElementById('modal-archive-btn').addEventListener('click', () => {
       if (activeNoteId) {
-        notes = notes.map(n => n.id === activeNoteId ? { ...n, isArchived: !n.isArchived, updatedAt: new Date().toISOString() } : n);
+        // Preserve any unsaved editor changes as a recoverable local draft before archiving.
+        flushEditorDraft();
+        notes = notes.map(n => String(n.id) === String(activeNoteId) ? { ...n, isArchived: !n.isArchived, updatedAt: new Date().toISOString() } : n);
         editorModal.classList.add('hidden');
+        activeNoteId = null;
+        editorBaseline = null;
         render(); syncToBackend();
       }
     });
@@ -2799,13 +2842,15 @@
       if (activeNoteId) {
         if (confirm('Apakah Anda yakin ingin menghapus catatan ini secara permanen dari perangkat dan Google Drive?')) {
           // 1. Hapus catatan dari array notes utama
-          notes = notes.filter(n => n.id !== activeNoteId);
+          notes = notes.filter(n => String(n.id) !== String(activeNoteId));
           
-          // 2. Tutup modal editor
+          // 2. Tutup modal editor dan bersihkan draft yang terkait
+          clearEditorDraft();
           editorModal.classList.add('hidden');
           
           // 3. Reset ID aktif
           activeNoteId = null;
+          editorBaseline = null;
           
           // 4. Render ulang tampilan layar
           render();
