@@ -11,6 +11,9 @@
     let searchQuery = '';
     let isListView = false;
     let activeNoteId = null;
+    function hasActiveNoteId() {
+      return activeNoteId !== null && activeNoteId !== undefined && String(activeNoteId) !== '';
+    }
     let searchRenderTimer = null;
     const SEARCH_DEBOUNCE_MS = 120;
     const SEARCH_HISTORY_KEY = 'hadi_keepflow_search_history_v1';
@@ -41,9 +44,19 @@
       return !category || category.toLocaleLowerCase() === 'umum' ? '' : category;
     }
 
+    function normalizeBooleanFlag(value) {
+      return value === true || value === 1 ||
+        (typeof value === 'string' && ['true', '1'].includes(value.trim().toLocaleLowerCase()));
+    }
+
     function normalizeNoteRecord(note) {
       if (!note || typeof note !== 'object') return note;
-      return { ...note, category: normalizeNoteCategory(note.category) };
+      return {
+        ...note,
+        category: normalizeNoteCategory(note.category),
+        isPinned: normalizeBooleanFlag(note.isPinned),
+        isArchived: normalizeBooleanFlag(note.isArchived)
+      };
     }
 
     function loadCategoryState() {
@@ -149,7 +162,7 @@
         alert('Masih ada antrean sinkronisasi. Tunggu sampai semua perubahan tersinkron sebelum mengubah atau menghapus kategori.');
         return false;
       }
-      if (editorDraftDirty) {
+      if (hasUnsavedEditorChanges()) {
         alert('Simpan atau batalkan draft editor terlebih dahulu sebelum mengubah kategori.');
         return false;
       }
@@ -362,7 +375,8 @@
         pendingOperations = value
           .filter(op => op && (op.type === 'save' || op.type === 'delete'))
           .map(op => {
-            const id = String(op.id || (op.note && op.note.id) || '');
+            const rawId = op.id != null ? op.id : (op.note && op.note.id);
+            const id = rawId == null ? '' : String(rawId);
             if (!id) return null;
             const normalized = {
               opId: op.opId || createOperationId(),
@@ -482,9 +496,10 @@
     }
 
     function enqueueOperation(type, noteOrId) {
-      const id = type === 'delete'
-        ? String(typeof noteOrId === 'object' ? noteOrId.id : noteOrId)
-        : String(noteOrId.id);
+      const rawId = type === 'delete'
+        ? (noteOrId && typeof noteOrId === 'object' ? noteOrId.id : noteOrId)
+        : (noteOrId && noteOrId.id);
+      const id = rawId == null ? '' : String(rawId);
       if (!id) return;
 
       const operation = type === 'delete'
@@ -572,7 +587,7 @@
     }
 
     function resolveSyncConflict(operation, response) {
-      const currentNote = response.currentNote || null;
+      const currentNote = response.currentNote ? normalizeNoteRecord(response.currentNote) : null;
       const id = String(operation.id);
       const message = currentNote
         ? 'Versi catatan di Google Drive berbeda dari versi lokal.\n\n' +
@@ -1174,7 +1189,7 @@
             persistLocal();
             reconcileCloudCategories(response.categories || categories);
             render();
-            if (activeNoteId) {
+            if (hasActiveNoteId()) {
               const activeNote = notes.find(note => String(note.id) === String(activeNoteId));
               if (activeNote && modalCategorySelect) modalCategorySelect.value = normalizeNoteCategory(activeNote.category);
             }
@@ -1788,7 +1803,7 @@
 
     function collectEditorDraft() {
       return {
-        noteId: activeNoteId ? String(activeNoteId) : '__new__',
+        noteId: hasActiveNoteId() ? String(activeNoteId) : '__new__',
         title: document.getElementById('modal-title-input').value,
         content: document.getElementById('editor-content-editable').innerHTML,
         category: normalizeNoteCategory(modalCategorySelect.value),
@@ -1796,6 +1811,20 @@
         baselineUpdatedAt: editorBaseline && editorBaseline.updatedAt || '',
         savedAt: new Date().toISOString()
       };
+    }
+
+    function hasUnsavedEditorChanges() {
+      if (!editorModal || editorModal.classList.contains('hidden')) return false;
+      const title = document.getElementById('modal-title-input').value.trim();
+      const content = sanitizeEditorHTML(document.getElementById('editor-content-editable').innerHTML.trim());
+      const category = normalizeNoteCategory(modalCategorySelect.value);
+      const tags = normalizeTags(document.getElementById('modal-tags-input').value);
+      if (!editorBaseline) return Boolean(title || content || tags.length);
+      const baselineTags = normalizeTags(Array.isArray(editorBaseline.tags) ? editorBaseline.tags.join(', ') : '');
+      return title !== String(editorBaseline.title || '').trim() ||
+        content !== sanitizeEditorHTML(String(editorBaseline.content || '').trim()) ||
+        category !== normalizeNoteCategory(editorBaseline.category) ||
+        JSON.stringify(tags) !== JSON.stringify(baselineTags);
     }
 
     function readEditorDraft() {
@@ -1818,6 +1847,13 @@
         setEditorDraftStatus('Draft gagal disimpan lokal. Periksa kapasitas penyimpanan browser.', 'text-red-500');
         console.error('KeepFlow draft persistence error:', error);
       }
+    }
+
+    function flushEditorDraftNow() {
+      if (!editorDraftDirty) return;
+      if (draftSaveTimer) clearTimeout(draftSaveTimer);
+      draftSaveTimer = null;
+      persistEditorDraft();
     }
 
     function scheduleEditorDraftSave() {
@@ -2077,7 +2113,7 @@
       const metaUpdated = document.getElementById('meta-updated');
 
       let currentNote = null;
-      if (noteId) {
+      if (noteId !== null && noteId !== undefined && String(noteId) !== '') {
         currentNote = notes.find(n => String(n.id) === String(noteId));
       }
       editorBaseline = currentNote ? cloneData(currentNote) : null;
@@ -2153,7 +2189,7 @@
         return;
       }
 
-      if (activeNoteId) {
+      if (hasActiveNoteId()) {
         notes = notes.map(n => String(n.id) === String(activeNoteId) ? {
           ...n, title, content, category, tags, updatedAt: new Date().toISOString()
         } : n);
@@ -2214,8 +2250,8 @@
 
     function makeBackupNoteFile(note) {
       const metadata = {
-        isPinned: Boolean(note.isPinned),
-        isArchived: Boolean(note.isArchived),
+        isPinned: normalizeBooleanFlag(note.isPinned),
+        isArchived: normalizeBooleanFlag(note.isArchived),
         tags: Array.isArray(note.tags) ? note.tags.filter(tag => typeof tag === 'string') : [],
         createdAt: note.createdAt || new Date().toISOString()
       };
@@ -2240,7 +2276,7 @@
       if (syncRunning || cloudLoadInProgress || pendingOperations.length > 0 || pendingCategoryCreates.length > 0) {
         throw new Error('Masih ada proses sinkronisasi atau antrean tertunda. Tunggu sampai status tersinkron, lalu coba lagi.');
       }
-      if (editorDraftDirty) throw new Error('Simpan atau batalkan draft editor terlebih dahulu sebelum backup/restore.');
+      if (hasUnsavedEditorChanges()) throw new Error('Simpan atau batalkan draft editor terlebih dahulu sebelum backup/restore.');
       if (!serverReady) throw new Error('Data cloud belum siap. Tunggu proses pemuatan selesai.');
     }
 
@@ -2333,14 +2369,17 @@
         for (let index = 0; index < cloudNotes.length; index++) {
           const note = cloudNotes[index];
           const category = normalizeNoteCategory(note.category);
-          const title = safeBackupSegment(note.title || ('Catatan ' + (index + 1)), 'Catatan Tanpa Judul');
-          const baseFilename = title + '.md';
+          const archiveCategory = category ? safeBackupSegment(category, 'Kategori') : '';
+          const originalTitle = String(note.title || '');
+          const backupTitle = originalTitle || ('Catatan ' + (index + 1));
+          const filenameTitle = safeBackupSegment(backupTitle, 'Catatan Tanpa Judul');
+          const baseFilename = filenameTitle + '.md';
           let filename = baseFilename;
           let suffix = 2;
-          let path = category ? category + '/' + filename : filename;
+          let path = archiveCategory ? archiveCategory + '/' + filename : filename;
           while (usedArchivePaths.has(path.toLocaleLowerCase())) {
-            filename = title + ' (' + suffix + ').md';
-            path = category ? category + '/' + filename : filename;
+            filename = filenameTitle + ' (' + suffix + ').md';
+            path = archiveCategory ? archiveCategory + '/' + filename : filename;
             suffix++;
           }
           usedArchivePaths.add(path.toLocaleLowerCase());
@@ -2348,8 +2387,8 @@
           manifest.notes.push({
             path,
             category,
-            title,
-            originalId: String(note.id || ''),
+            title: originalTitle || backupTitle,
+            originalId: note.id == null ? '' : String(note.id),
             updatedAt: note.updatedAt || ''
           });
 
@@ -2423,8 +2462,8 @@
         title,
         content,
         category: category,
-        isPinned: metadata.isPinned === true || metadata.isPinned === 1 || String(metadata.isPinned).toLowerCase() === 'true',
-        isArchived: metadata.isArchived === true || metadata.isArchived === 1 || String(metadata.isArchived).toLowerCase() === 'true',
+        isPinned: normalizeBooleanFlag(metadata.isPinned),
+        isArchived: normalizeBooleanFlag(metadata.isArchived),
         tags,
         createdAt: metadata.createdAt || new Date().toISOString()
       };
@@ -2788,8 +2827,8 @@
     document.getElementById('modal-close-btn').addEventListener('click', () => {
       const title = document.getElementById('modal-title-input').value.trim();
       const content = document.getElementById('editor-content-editable').innerHTML.trim();
-      const current = activeNoteId ? notes.find(n => String(n.id) === String(activeNoteId)) : null;
-      const changed = activeNoteId
+      const current = hasActiveNoteId() ? notes.find(n => String(n.id) === String(activeNoteId)) : null;
+      const changed = hasActiveNoteId()
         ? current && (title !== (current.title || '') || content !== (current.content || '') ||
             document.getElementById('modal-tags-input').value !== (current.tags || []).join(', ') ||
             normalizeNoteCategory(modalCategorySelect.value) !== normalizeNoteCategory(current.category))
@@ -2835,12 +2874,11 @@
       element.addEventListener('input', scheduleEditorDraftSave);
       element.addEventListener('change', scheduleEditorDraftSave);
     });
-    window.addEventListener('beforeunload', () => {
-      if (!editorModal.classList.contains('hidden') && editorDraftDirty) persistEditorDraft();
-    });
+    window.addEventListener('beforeunload', flushEditorDraftNow);
+    window.addEventListener('pagehide', flushEditorDraftNow);
 
     document.getElementById('modal-pin-btn').addEventListener('click', () => {
-      if (!activeNoteId) return;
+      if (!hasActiveNoteId()) return;
 
       const current = notes.find(n => String(n.id) === String(activeNoteId));
       if (!current) return;
@@ -2866,24 +2904,35 @@
     });
 
     document.getElementById('modal-archive-btn').addEventListener('click', () => {
-      if (activeNoteId) {
-        notes = notes.map(n => n.id === activeNoteId ? { ...n, isArchived: !n.isArchived, updatedAt: new Date().toISOString() } : n);
+      if (hasActiveNoteId()) {
+        const noteId = String(activeNoteId);
+        const current = notes.find(note => String(note.id) === noteId);
+        if (!current) return;
+        flushEditorDraftNow();
+        const nextArchived = !isArchivedNote(current);
+        notes = notes.map(note => String(note.id) === noteId
+          ? { ...note, isArchived: nextArchived, updatedAt: new Date().toISOString() }
+          : note);
         editorModal.classList.add('hidden');
+        activeNoteId = null;
+        editorBaseline = null;
         render(); syncToBackend();
       }
     });
 
     document.getElementById('modal-delete-btn').addEventListener('click', () => {
-      if (activeNoteId) {
+      if (hasActiveNoteId()) {
         if (confirm('Apakah Anda yakin ingin menghapus catatan ini secara permanen dari perangkat dan Google Drive?')) {
-          // 1. Hapus catatan dari array notes utama
-          notes = notes.filter(n => n.id !== activeNoteId);
+          const noteId = String(activeNoteId);
+          notes = notes.filter(note => String(note.id) !== noteId);
+          clearEditorDraft();
           
           // 2. Tutup modal editor
           editorModal.classList.add('hidden');
           
           // 3. Reset ID aktif
           activeNoteId = null;
+          editorBaseline = null;
           
           // 4. Render ulang tampilan layar
           render();
@@ -3108,7 +3157,10 @@
     });
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState !== 'visible') return;
+      if (document.visibilityState !== 'visible') {
+        flushEditorDraftNow();
+        return;
+      }
       // Recover timers that may have been throttled while the tab was hidden.
       if (pendingOperations.length && serverReady && !syncRunning) {
         schedulePendingRetry();
