@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.6-dev — Phase 3.7.4 Integration & Reliability
+    // Hadi KeepFlow v1.3.6-rc.1 — Phase 3.7.4 Integration & Reliability
     let notes = [];
     let currentFilter = 'all';
     let activeSection = 'dashboard';
@@ -1547,7 +1547,9 @@
       document.getElementById('dashboard-nav').classList.toggle('dark:text-gray-400', !dashboardVisible);
       if (dashboardVisible) document.getElementById('dashboard-nav').setAttribute('aria-current', 'page');
       else document.getElementById('dashboard-nav').removeAttribute('aria-current');
-      renderDashboard();
+      // Dashboard statistics and recent-note previews are not visible in the
+      // workspace view. Defer their O(n) aggregation until the dashboard opens.
+      if (dashboardVisible) renderDashboard();
       const filtered = getFilteredNotes();
       const existingIds = new Set(notes.map(note => String(note.id)));
       [...selectedNoteIds].forEach(id => { if (!existingIds.has(id)) selectedNoteIds.delete(id); });
@@ -2358,7 +2360,7 @@
           format: KEEPFLOW_BACKUP_FORMAT,
           schemaVersion: KEEPFLOW_BACKUP_SCHEMA,
           application: 'Hadi KeepFlow',
-          applicationVersion: '1.3.6-dev',
+          applicationVersion: '1.3.6-rc.1',
           createdAt: snapshot.generatedAt || new Date().toISOString(),
           noteCount: cloudNotes.length,
           categories: [...new Set(cloudCategories.filter(category => String(category).toLocaleLowerCase() !== 'umum'))],
