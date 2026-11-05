@@ -360,24 +360,44 @@
         <i class="fa-solid fa-arrow-left text-lg"></i>
       </button>
 
-      <div class="flex items-center space-x-2">
-        <button id="modal-pin-btn" class="action-btn p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition" title="Sematkan / Lepas Pin">
-          <i class="fa-solid fa-thumbtack text-lg"></i>
-        </button>
-        <button id="modal-archive-btn" class="action-btn p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition" title="Arsip / Pulihkan">
-          <i class="fa-solid fa-box-archive text-lg"></i>
-        </button>
-        <button id="modal-delete-btn" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-red-500" title="Hapus">
-          <i class="fa-solid fa-trash text-lg"></i>
-        </button>
-        <button id="modal-save-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm transition">
+      <div class="flex items-center gap-1 sm:gap-2">
+        <div class="hidden md:flex items-center space-x-2">
+          <button id="modal-pin-btn" type="button" class="action-btn p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition" title="Sematkan / Lepas Pin" aria-label="Sematkan atau lepas pin">
+            <i class="fa-solid fa-thumbtack text-lg"></i>
+          </button>
+          <button id="modal-archive-btn" type="button" class="action-btn p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 transition" title="Arsip / Pulihkan" aria-label="Arsipkan atau pulihkan">
+            <i class="fa-solid fa-box-archive text-lg"></i>
+          </button>
+          <button id="modal-delete-btn" type="button" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-red-500" title="Hapus" aria-label="Hapus catatan">
+            <i class="fa-solid fa-trash text-lg"></i>
+          </button>
+        </div>
+        <div id="modal-mobile-actions" class="relative md:hidden">
+          <button id="modal-mobile-actions-toggle" type="button" class="min-w-[44px] min-h-[44px] p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-300" aria-label="Tindakan catatan" aria-haspopup="true" aria-expanded="false" aria-controls="modal-mobile-actions-menu">
+            <i class="fa-solid fa-ellipsis text-xl"></i>
+          </button>
+          <div id="modal-mobile-actions-menu" class="hidden absolute right-0 top-full mt-1 z-[70] w-52 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-xl p-1" role="menu" aria-label="Tindakan catatan">
+            <button id="mobile-pin-action" type="button" role="menuitem" class="w-full min-h-[44px] flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fa-solid fa-thumbtack w-5 text-center"></i><span>Sematkan / Lepas pin</span></button>
+            <button id="mobile-archive-action" type="button" role="menuitem" class="w-full min-h-[44px] flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left hover:bg-gray-100 dark:hover:bg-gray-700"><i class="fa-solid fa-box-archive w-5 text-center"></i><span>Arsipkan / Pulihkan</span></button>
+            <button id="mobile-delete-action" type="button" role="menuitem" class="w-full min-h-[44px] flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-left text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"><i class="fa-solid fa-trash w-5 text-center"></i><span>Hapus catatan</span></button>
+          </div>
+        </div>
+        <button id="modal-save-btn" type="button" class="min-h-[44px] px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium text-sm transition">
           Simpan
         </button>
       </div>
     </div>
 
     <!-- Formatting Toolbar -->
-    <div id="editor-toolbar" role="toolbar" aria-label="Pemformatan catatan" class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 flex flex-wrap items-center gap-1 shrink-0">
+    <div id="editor-format-region" class="editor-format-region shrink-0">
+      <div class="editor-format-controls md:hidden px-3 py-1.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+        <button id="editor-format-toggle" type="button" class="min-h-[44px] inline-flex items-center gap-2 px-3 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800" aria-expanded="false" aria-controls="editor-toolbar">
+          <i class="fa-solid fa-text-height text-blue-600 dark:text-blue-400"></i>
+          <span>Format</span>
+          <i id="editor-format-toggle-icon" class="fa-solid fa-chevron-down text-xs text-gray-400"></i>
+        </button>
+      </div>
+      <div id="editor-toolbar" role="toolbar" aria-label="Pemformatan catatan" class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 flex flex-nowrap items-center gap-1 shrink-0">
       <button type="button" data-command="undo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Urungkan (Ctrl+Z)" aria-label="Urungkan"><i class="fa-solid fa-rotate-left"></i></button>
       <button type="button" data-command="redo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Ulangi (Ctrl+Y)" aria-label="Ulangi"><i class="fa-solid fa-rotate-right"></i></button>
       <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
@@ -398,11 +418,12 @@
       <button type="button" data-command="insertHorizontalRule" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Garis pemisah"><i class="fa-solid fa-minus"></i></button>
       <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
       <button type="button" data-command="removeFormat" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Hapus format"><i class="fa-solid fa-eraser"></i></button>
+      </div>
     </div>
 
     <!-- Modal Body -->
-    <div class="editor-modal-body flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-8 max-w-4xl mx-auto w-full custom-scrollbar flex flex-col">
-      <div class="flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+    <div class="editor-modal-body flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-8 max-w-4xl mx-auto w-full custom-scrollbar flex flex-col">
+      <div class="editor-metadata-row flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
         <select id="modal-category-select" class="bg-gray-100 dark:bg-gray-800 border-0 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium focus:ring-2 focus:ring-blue-500">
         </select>
         <div class="flex items-center gap-2 sm:ml-auto">
@@ -419,7 +440,7 @@
         </div>
       </div>
 
-      <input type="text" id="modal-title-input" placeholder="Judul" class="w-full text-2xl sm:text-3xl font-bold bg-transparent border-0 focus:ring-0 px-0 mb-4 text-gray-900 dark:text-white placeholder-gray-400">
+      <input type="text" id="modal-title-input" placeholder="Judul" class="w-full text-2xl sm:text-3xl font-bold bg-transparent border-0 focus:ring-0 px-0 mb-3 sm:mb-4 text-gray-900 dark:text-white placeholder-gray-400">
       
       <div id="modal-timestamps" class="text-xs text-gray-400 mb-2 flex flex-wrap gap-x-4 gap-y-1">
         <span id="meta-created">Dibuat: -</span>

@@ -63,13 +63,90 @@
       outline: 2px solid #3b82f6;
       outline-offset: 2px;
     }
+
+    /* Mobile-first note editor experience. Desktop keeps the full toolbar visible. */
+    #editor-modal {
+      height: 100vh;
+      height: 100dvh;
+      top: 0;
+      bottom: auto;
+      overflow: hidden;
+    }
+    #editor-modal .editor-modal-body { min-height: 0; }
+    #editor-content-editable {
+      display: block;
+      flex: 1 0 auto;
+      height: auto;
+      min-height: max(35vh, 10rem);
+      overflow: visible;
+      overflow-wrap: anywhere;
+    }
+    #editor-toolbar { min-width: 0; }
+    #editor-toolbar .toolbar-btn,
+    #editor-toolbar > button { min-width: 40px; min-height: 40px; flex: 0 0 auto; }
+    #editor-format-toggle:focus-visible,
+    #modal-mobile-actions-toggle:focus-visible,
+    #modal-mobile-actions-menu button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+    @media (max-width: 767px) {
+      #editor-modal {
+        height: var(--keepflow-visual-height, 100dvh);
+        top: var(--keepflow-visual-offset-top, 0px);
+        padding-top: env(safe-area-inset-top, 0px);
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+      }
+      #editor-modal > .h-16 { height: 3.5rem; min-height: 3.5rem; padding-left: .75rem; padding-right: .75rem; }
+      #editor-format-region { width: 100%; }
+      #editor-toolbar {
+        display: none;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        overflow-y: hidden;
+        white-space: nowrap;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+        scrollbar-width: thin;
+        padding-top: .35rem;
+        padding-bottom: .35rem;
+      }
+      #editor-modal.format-toolbar-open #editor-toolbar { display: flex; }
+      #editor-toolbar > .w-px { flex: 0 0 1px; }
+      #editor-toolbar .toolbar-btn,
+      #editor-toolbar > button { min-width: 44px; min-height: 44px; padding: .65rem; }
+      #editor-modal .editor-modal-body { padding: .75rem; gap: 0; }
+      #editor-modal .editor-metadata-row { margin-bottom: .65rem; }
+      #modal-category-select,
+      #editor-template-select,
+      #manage-templates-btn { min-height: 40px; }
+      #modal-title-input { font-size: 1.5rem; line-height: 1.25; margin-bottom: .55rem; }
+      #modal-timestamps { font-size: .65rem; gap: .25rem .75rem; margin-bottom: .25rem; }
+      #editor-draft-status { font-size: .68rem; line-height: 1.25; margin-bottom: .5rem; }
+      #editor-content-editable {
+        flex: 1 0 auto;
+        min-height: max(32vh, 10rem);
+        min-height: max(32dvh, 10rem);
+        padding-bottom: 1rem;
+        font-size: 1rem;
+      }
+      #editor-metrics { margin-top: .4rem; gap: .35rem; font-size: 10px; }
+      #modal-tags-input { font-size: 16px; min-height: 40px; }
+      #editor-modal .editor-modal-body > .mt-4 { margin-top: .65rem; padding-top: .55rem; }
+    }
+    @media (min-width: 768px) {
+      #editor-toolbar { display: flex !important; flex-wrap: nowrap; overflow-x: visible; }
+      #editor-modal .editor-modal-body { padding: 2rem; }
+    }
+    @media (max-width: 380px) {
+      #editor-metrics span { max-width: 33%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #modal-save-btn { padding-left: .8rem; padding-right: .8rem; }
+    }
+
     /* Editor layout: keep long content in the scrollable modal body, not over metrics/tags. */
     #editor-modal > .editor-modal-body { min-height: 0; }
     #editor-content-editable {
       display: block;
-      flex: 0 0 auto;
+      flex: 1 0 auto;
       height: auto;
-      min-height: max(45vh, 250px);
+      min-height: max(35vh, 10rem);
       overflow: visible;
       overflow-wrap: anywhere;
     }
@@ -213,6 +290,15 @@
       content: attr(data-placeholder);
       color: #9ca3af;
       pointer-events: none;
+    }
+    /* Final mobile overrides: keep the writing area flexible after legacy editor rules. */
+    @media (max-width: 767px) {
+      #editor-content-editable {
+        flex: 1 0 auto;
+        min-height: max(32vh, 10rem);
+        min-height: max(32dvh, 10rem);
+      }
+      #editor-toolbar { flex-wrap: nowrap; }
     }
   </style>
 
