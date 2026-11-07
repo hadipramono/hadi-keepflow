@@ -1,6 +1,6 @@
 <!-- Main frontend application script. Included by Index.html. -->
   <script>
-    // Hadi KeepFlow v1.3.6 — Phase 3.7.4 Integration & Reliability
+    // Hadi KeepFlow v1.3.7 — Phase 3.7.4 Integration & Reliability
     let notes = [];
     let currentFilter = 'all';
     let activeSection = 'dashboard';
@@ -300,8 +300,41 @@
     if (editableArea) {
       editableArea.addEventListener('mouseup', () => { captureEditorSelection(); updateToolbarState(); });
       editableArea.addEventListener('keyup', () => { captureEditorSelection(); updateToolbarState(); updateEditorMetrics(); });
-      editableArea.addEventListener('focus', updateToolbarState);
-      editableArea.addEventListener('input', updateEditorMetrics);
+      // Activate the composer on pointer interaction as well as focus. Native
+      // checklist inputs inside contenteditable can receive focus themselves,
+      // so relying on the contenteditable focus event alone hides the dock.
+      editableArea.addEventListener('pointerdown', () => {
+        setEditorContentActive(true);
+        syncEditorVisualViewport();
+      }, { capture: true, passive: true });
+      editableArea.addEventListener('focusin', () => {
+        setEditorContentActive(true);
+        updateToolbarState();
+        syncEditorVisualViewport();
+      });
+      editableArea.addEventListener('focus', () => {
+        setEditorContentActive(true);
+        updateToolbarState();
+        syncEditorVisualViewport();
+      });
+      editableArea.addEventListener('blur', event => {
+        // Focus may move from contenteditable to a native checklist input nested
+        // inside it, or to a toolbar button. Neither transition should hide dock.
+        const nextTarget = event.relatedTarget;
+        const dock = document.getElementById('editor-bottom-dock');
+        if ((nextTarget && editableArea.contains(nextTarget)) ||
+            (nextTarget && dock && dock.contains(nextTarget))) return;
+        window.setTimeout(() => {
+          const active = document.activeElement;
+          if (editableArea.contains(active) || (dock && dock.contains(active))) return;
+          setEditorContentActive(false);
+        }, 0);
+      });
+      editableArea.addEventListener('input', () => {
+        setEditorContentActive(true);
+        updateEditorMetrics();
+        syncEditorVisualViewport();
+      });
       editableArea.addEventListener('change', event => {
         const checkbox = event.target.closest('input[type="checkbox"]');
         if (!checkbox || !editableArea.contains(checkbox)) return;
@@ -311,6 +344,11 @@
         updateEditorMetrics();
       });
     }
+    ['modal-title-input', 'modal-category-select', 'editor-template-select', 'modal-tags-input'].forEach(id => {
+      const field = document.getElementById(id);
+      if (field) field.addEventListener('focus', () => setEditorContentActive(false));
+    });
+
     const insertChecklistButton = document.getElementById('insert-checklist-btn');
     insertChecklistButton.addEventListener('pointerdown', captureEditorSelection);
     insertChecklistButton.addEventListener('mousedown', event => event.preventDefault());
@@ -318,6 +356,46 @@
       event.preventDefault();
       restoreEditorSelection(document.getElementById('editor-content-editable'));
       insertEditorChecklist();
+    });
+    const mobileChecklistButton = document.getElementById('mobile-insert-checklist-btn');
+    const mobileLinkButton = document.getElementById('mobile-insert-link-btn');
+    const mobileFormatButton = document.getElementById('mobile-open-formatting-btn');
+    const mobileFormatBackButton = document.getElementById('mobile-format-back-btn');
+
+    [mobileChecklistButton, mobileLinkButton].forEach(button => {
+      if (!button) return;
+      button.addEventListener('pointerdown', captureEditorSelection);
+      button.addEventListener('mousedown', event => event.preventDefault());
+    });
+    if (mobileChecklistButton) mobileChecklistButton.addEventListener('click', event => {
+      event.preventDefault();
+      insertChecklistButton.click();
+    });
+    if (mobileLinkButton) mobileLinkButton.addEventListener('click', event => {
+      event.preventDefault();
+      restoreEditorSelection(document.getElementById('editor-content-editable'));
+      insertEditorLink();
+    });
+    if (mobileFormatButton) {
+      mobileFormatButton.addEventListener('pointerdown', captureEditorSelection);
+      mobileFormatButton.addEventListener('mousedown', event => event.preventDefault());
+      mobileFormatButton.addEventListener('click', event => {
+      event.preventDefault();
+      captureEditorSelection();
+      setEditorFormattingMode(true);
+      syncEditorVisualViewport();
+      });
+    }
+    [mobileFormatBackButton].forEach(button => {
+      if (!button) return;
+      button.addEventListener('mousedown', event => event.preventDefault());
+      button.addEventListener('click', event => {
+        event.preventDefault();
+        setEditorFormattingMode(false);
+        const editor = document.getElementById('editor-content-editable');
+        restoreEditorSelection(editor);
+        syncEditorVisualViewport();
+      });
     });
     document.getElementById('editor-template-select').addEventListener('change', event => applyProductivityTemplate(event.target.value));
     document.getElementById('manage-templates-btn').addEventListener('click', openTemplateManager);
@@ -352,6 +430,7 @@
     function formatDate(isoString) {
       if (!isoString) return '-';
       const date = new Date(isoString);
+      if (Number.isNaN(date.getTime())) return '-';
       return date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' });
     }
 
@@ -929,20 +1008,22 @@
     const pinnedSection = document.getElementById('pinned-section');
     const othersTitle = document.getElementById('others-title');
     const editorModal = document.getElementById('editor-modal');
-    const editorFormatToggle = document.getElementById('editor-format-toggle');
     const mobileActionsToggle = document.getElementById('modal-mobile-actions-toggle');
     const mobileActionsMenu = document.getElementById('modal-mobile-actions-menu');
 
-    function setEditorFormatToolbar(open) {
-      const shouldOpen = Boolean(open) && window.matchMedia('(max-width: 767px)').matches;
-      editorModal.classList.toggle('format-toolbar-open', shouldOpen);
-      if (editorFormatToggle) {
-        editorFormatToggle.setAttribute('aria-expanded', String(shouldOpen));
-        const icon = document.getElementById('editor-format-toggle-icon');
-        if (icon) icon.className = shouldOpen
-          ? 'fa-solid fa-chevron-up text-xs text-gray-400'
-          : 'fa-solid fa-chevron-down text-xs text-gray-400';
-      }
+    function setEditorFormattingMode(active) {
+      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      const enabled = Boolean(active) && isMobile;
+      editorModal.classList.toggle('editor-formatting-mode', enabled);
+      const toggle = document.getElementById('mobile-open-formatting-btn');
+      if (toggle) toggle.setAttribute('aria-pressed', String(enabled));
+    }
+
+    function setEditorContentActive(active) {
+      const isMobile = window.matchMedia('(max-width: 767px)').matches;
+      const enabled = Boolean(active) && isMobile;
+      editorModal.classList.toggle('editor-content-active', enabled);
+      if (!enabled) setEditorFormattingMode(false);
     }
 
     function closeMobileActionsMenu(returnFocus = false) {
@@ -961,21 +1042,22 @@
       }
       const viewport = window.visualViewport;
       if (viewport) {
-        editorModal.style.setProperty('--keepflow-visual-height', Math.max(240, Math.round(viewport.height)) + 'px');
-        editorModal.style.setProperty('--keepflow-visual-offset-top', Math.max(0, Math.round(viewport.offsetTop)) + 'px');
+        const visualTop = Math.max(0, viewport.offsetTop || 0);
+        const visualHeight = Math.max(240, viewport.height || window.innerHeight);
+        // Resize/reposition the modal to the actual visual viewport. The mobile
+        // composer is absolutely docked to this modal's bottom edge, so it stays
+        // immediately above the virtual keyboard whether Chrome resizes the layout
+        // viewport or only the visual viewport.
+        editorModal.style.setProperty('--keepflow-visual-height', Math.round(visualHeight) + 'px');
+        editorModal.style.setProperty('--keepflow-visual-offset-top', Math.round(visualTop) + 'px');
+        editorModal.style.setProperty('--keepflow-keyboard-inset', '0px');
       } else {
         editorModal.style.removeProperty('--keepflow-visual-height');
         editorModal.style.removeProperty('--keepflow-visual-offset-top');
+        editorModal.style.setProperty('--keepflow-keyboard-inset', '0px');
       }
     }
 
-    if (editorFormatToggle) {
-      editorFormatToggle.addEventListener('pointerdown', captureEditorSelection);
-      editorFormatToggle.addEventListener('mousedown', event => event.preventDefault());
-      editorFormatToggle.addEventListener('click', () => {
-        setEditorFormatToolbar(!editorModal.classList.contains('format-toolbar-open'));
-      });
-    }
     if (mobileActionsToggle && mobileActionsMenu) {
       mobileActionsToggle.addEventListener('click', () => {
         const opening = mobileActionsMenu.classList.contains('hidden');
@@ -1009,11 +1091,18 @@
     document.addEventListener('selectionchange', captureEditorSelection);
     window.addEventListener('resize', () => {
       syncEditorVisualViewport();
-      if (window.matchMedia('(min-width: 768px)').matches) setEditorFormatToolbar(false);
+      if (!window.matchMedia('(max-width: 767px)').matches) { setEditorContentActive(false); setEditorFormattingMode(false); }
     }, { passive: true });
     if (window.visualViewport) {
       window.visualViewport.addEventListener('resize', syncEditorVisualViewport, { passive: true });
       window.visualViewport.addEventListener('scroll', syncEditorVisualViewport, { passive: true });
+    }
+    const editorBottomDock = document.getElementById('editor-bottom-dock');
+    if (editorBottomDock && typeof ResizeObserver !== 'undefined') {
+      const dockResizeObserver = new ResizeObserver(() => {
+        editorModal.style.setProperty('--keepflow-dock-height', Math.ceil(editorBottomDock.getBoundingClientRect().height) + 'px');
+      });
+      dockResizeObserver.observe(editorBottomDock);
     }
 
     const tagsList = document.getElementById('tags-list');
@@ -1186,13 +1275,17 @@
         const noteCount = notes.filter(note =>
           normalizeNoteCategory(note.category).toLocaleLowerCase() === category.toLocaleLowerCase()
         ).length;
+        if (noteCount > 0) {
+          alert(
+            'Kategori "' + category + '" masih memiliki ' + noteCount +
+            ' catatan (termasuk catatan arsip). Pindahkan atau hapus catatan tersebut terlebih dahulu.'
+          );
+          return;
+        }
+
         const confirmed = confirm(
           'Hapus kategori "' + category + '"?\n\n' +
-          (noteCount
-            ? noteCount + ' catatan (termasuk catatan arsip) akan dipindahkan ke Temporary Inbox.'
-            : 'Kategori ini tidak memiliki catatan.') +
-          '\n\nFile catatan tidak akan dihapus. ID, isi, dan metadata tetap dipertahankan. ' +
-          'File selain .md/.txt dan subfolder tidak akan dihapus; jika ditemukan, kategori mungkin tetap ada sampai dirapikan.\n\nLanjutkan?'
+          'Kategori ini kosong. Tidak ada catatan yang akan dipindahkan atau dihapus.'
         );
         if (!confirmed) return;
 
@@ -1200,40 +1293,21 @@
         deleteButton.classList.add('opacity-50');
         google.script.run
           .withSuccessHandler(response => {
-            if (!response || !['success', 'partial'].includes(response.status)) {
+            if (!response || response.status !== 'success') {
               alert((response && response.message) || 'Kategori gagal dihapus.');
               renderCategories();
               return;
             }
 
-            if (response.folderTrashed && currentCategory &&
-                currentCategory.toLocaleLowerCase() === category.toLocaleLowerCase()) {
+            if (currentCategory && currentCategory.toLocaleLowerCase() === category.toLocaleLowerCase()) {
               currentCategory = null;
               currentFilter = 'inbox';
               currentTag = null;
             }
 
             loadInitialData();
-
-            const summary = [
-              response.status === 'success' ? 'Kategori berhasil dihapus.' : 'Penghapusan kategori belum sepenuhnya selesai.',
-              'Catatan dipindahkan ke Inbox: ' + (response.filesMoved || 0),
-              'Catatan yang sudah berada di Inbox: ' + (response.filesAlreadyInInbox || 0),
-              'File tersisa di folder kategori: ' + (response.remainingFiles || 0),
-              'Subfolder tersisa: ' + (response.remainingFolders || 0)
-            ];
-            if (response.skippedFiles && response.skippedFiles.length) {
-              summary.push('', 'File non-catatan yang tidak dipindahkan:', ...response.skippedFiles.slice(0, 8));
-            }
-            if (response.errors && response.errors.length) {
-              summary.push('', 'Kesalahan:', ...response.errors.slice(0, 5).map(item => item.file + ': ' + item.message));
-            }
-            alert(summary.join('\n'));
-            setSyncStatus(
-              response.status === 'success' ? 'Kategori dihapus; catatan dipindahkan ke Inbox' : 'Kategori diproses sebagian; periksa detail',
-              response.status === 'success' ? 'fa-inbox' : 'fa-triangle-exclamation',
-              response.status === 'success' ? 'text-green-500' : 'text-amber-500'
-            );
+            alert('Kategori berhasil dihapus. Tidak ada catatan yang dipindahkan atau dihapus.');
+            setSyncStatus('Kategori kosong berhasil dihapus', 'fa-check', 'text-green-500');
           })
           .withFailureHandler(error => {
             console.error('KeepFlow delete category error:', error);
@@ -2224,7 +2298,34 @@
       return parsed.body.innerHTML;
     }
 
+    // R2 — accessible modal lifecycle: restore focus to the control that opened the editor.
+    let editorReturnFocus = null;
+
+    function closeEditorModal() {
+      editorModal.classList.add('hidden');
+      editorModal.classList.remove('editor-content-active', 'editor-formatting-mode');
+      editorModal.style.removeProperty('--keepflow-visual-height');
+      editorModal.style.removeProperty('--keepflow-visual-offset-top');
+      editorModal.style.removeProperty('--keepflow-keyboard-inset');
+      closeMobileActionsMenu();
+      savedEditorRange = null;
+      activeNoteId = null;
+      editorBaseline = null;
+      const returnTarget = editorReturnFocus;
+      editorReturnFocus = null;
+      if (returnTarget && typeof returnTarget.focus === 'function' && document.contains(returnTarget)) {
+        returnTarget.focus({ preventScroll: true });
+      }
+    }
+
+    function getEditorFocusableElements() {
+      return Array.from(editorModal.querySelectorAll(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]), [contenteditable="true"]'
+      )).filter(element => element.getClientRects().length > 0 && element.getAttribute('aria-hidden') !== 'true');
+    }
+
     function openEditor(noteId = null) {
+      editorReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       activeNoteId = noteId;
       savedEditorRange = null;
       const modalTitle = document.getElementById('modal-title-input');
@@ -2246,8 +2347,11 @@
         modalContentEditable.innerHTML = sanitizeEditorHTML(currentNote.content || '');
         modalCategorySelect.value = normalizeNoteCategory(currentNote.category);
         modalTags.value = (currentNote.tags || []).join(', ');
-        metaCreated.textContent = `Dibuat: ${formatDate(currentNote.createdAt)}`;
-        metaUpdated.textContent = `Diperbarui: ${formatDate(currentNote.updatedAt)}`;
+        const timestampFallback = new Date().toISOString();
+        const createdAt = currentNote.createdAt || currentNote.updatedAt || timestampFallback;
+        const updatedAt = currentNote.updatedAt || currentNote.createdAt || timestampFallback;
+        metaCreated.textContent = `Dibuat: ${formatDate(createdAt)}`;
+        metaUpdated.textContent = `Diperbarui: ${formatDate(updatedAt)}`;
       } else {
         modalTitle.value = '';
         modalContentEditable.innerHTML = '';
@@ -2284,12 +2388,15 @@
       editorDraftDirty = false;
       updateModalActionStates(currentNote);
       updateEditorMetrics();
-      setEditorFormatToolbar(false);
+      setEditorContentActive(false);
+      setEditorFormattingMode(false);
       closeMobileActionsMenu();
       editorModal.classList.remove('hidden');
       syncEditorVisualViewport();
       if (window.matchMedia('(min-width: 768px)').matches) {
         modalContentEditable.focus({ preventScroll: true });
+      } else {
+        document.getElementById('modal-close-btn').focus({ preventScroll: true });
       }
       updateToolbarState();
     }
@@ -2310,10 +2417,11 @@
       }
       if (!title && !content) {
         clearEditorDraft();
-        editorModal.classList.add('hidden');
-        editorModal.classList.remove('format-toolbar-open');
+        closeEditorModal();
+        editorModal.classList.remove('editor-content-active');
         editorModal.style.removeProperty('--keepflow-visual-height');
         editorModal.style.removeProperty('--keepflow-visual-offset-top');
+        editorModal.style.removeProperty('--keepflow-keyboard-inset');
         closeMobileActionsMenu();
         savedEditorRange = null;
         activeNoteId = null;
@@ -2321,8 +2429,11 @@
       }
 
       if (hasActiveNoteId()) {
+        const saveTimestamp = new Date().toISOString();
         notes = notes.map(n => String(n.id) === String(activeNoteId) ? {
-          ...n, title, content, category, tags, updatedAt: new Date().toISOString()
+          ...n, title, content, category, tags,
+          createdAt: n.createdAt || n.updatedAt || saveTimestamp,
+          updatedAt: saveTimestamp
         } : n);
       } else {
         notes.unshift({
@@ -2336,10 +2447,11 @@
       }
 
       clearEditorDraft();
-      editorModal.classList.add('hidden');
-      editorModal.classList.remove('format-toolbar-open');
+      closeEditorModal();
+      editorModal.classList.remove('editor-content-active');
       editorModal.style.removeProperty('--keepflow-visual-height');
       editorModal.style.removeProperty('--keepflow-visual-offset-top');
+      editorModal.style.removeProperty('--keepflow-keyboard-inset');
       closeMobileActionsMenu();
       savedEditorRange = null;
       activeNoteId = null;
@@ -2494,7 +2606,7 @@
           format: KEEPFLOW_BACKUP_FORMAT,
           schemaVersion: KEEPFLOW_BACKUP_SCHEMA,
           application: 'Hadi KeepFlow',
-          applicationVersion: '1.3.6',
+          applicationVersion: '1.3.7',
           createdAt: snapshot.generatedAt || new Date().toISOString(),
           noteCount: cloudNotes.length,
           categories: [...new Set(cloudCategories.filter(category => String(category).toLocaleLowerCase() !== 'umum'))],
@@ -2972,10 +3084,11 @@
       if (changed && !confirm('Perubahan belum disimpan. Tutup editor dan buang perubahan?')) return;
       if (changed) clearEditorDraft();
       else clearEditorDraft();
-      editorModal.classList.add('hidden');
-      editorModal.classList.remove('format-toolbar-open');
+      closeEditorModal();
+      editorModal.classList.remove('editor-content-active');
       editorModal.style.removeProperty('--keepflow-visual-height');
       editorModal.style.removeProperty('--keepflow-visual-offset-top');
+      editorModal.style.removeProperty('--keepflow-keyboard-inset');
       closeMobileActionsMenu();
       savedEditorRange = null;
       activeNoteId = null;
@@ -2984,9 +3097,34 @@
     document.getElementById('modal-save-btn').addEventListener('click', saveActiveNote);
     document.addEventListener('keydown', event => {
       if (editorModal.classList.contains('hidden')) return;
+      if (event.key === 'Tab') {
+        const focusable = getEditorFocusableElements();
+        if (!focusable.length) {
+          event.preventDefault();
+          editorModal.focus({ preventScroll: true });
+          return;
+        }
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && (document.activeElement === first || !editorModal.contains(document.activeElement))) {
+          event.preventDefault();
+          last.focus();
+          return;
+        }
+        if (!event.shiftKey && (document.activeElement === last || !editorModal.contains(document.activeElement))) {
+          event.preventDefault();
+          first.focus();
+          return;
+        }
+      }
       if (event.key === 'Escape' && mobileActionsMenu && !mobileActionsMenu.classList.contains('hidden')) {
         event.preventDefault();
         closeMobileActionsMenu(true);
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        document.getElementById('modal-close-btn').click();
         return;
       }
       const modifier = event.ctrlKey || event.metaKey;
@@ -3059,10 +3197,11 @@
         notes = notes.map(note => String(note.id) === noteId
           ? { ...note, isArchived: nextArchived, updatedAt: new Date().toISOString() }
           : note);
-        editorModal.classList.add('hidden');
-        editorModal.classList.remove('format-toolbar-open');
+        closeEditorModal();
+        editorModal.classList.remove('editor-content-active');
         editorModal.style.removeProperty('--keepflow-visual-height');
         editorModal.style.removeProperty('--keepflow-visual-offset-top');
+        editorModal.style.removeProperty('--keepflow-keyboard-inset');
         closeMobileActionsMenu();
         savedEditorRange = null;
         activeNoteId = null;
@@ -3079,10 +3218,11 @@
           clearEditorDraft();
           
           // 2. Tutup modal editor
-          editorModal.classList.add('hidden');
-          editorModal.classList.remove('format-toolbar-open');
+          closeEditorModal();
+          editorModal.classList.remove('editor-content-active');
           editorModal.style.removeProperty('--keepflow-visual-height');
           editorModal.style.removeProperty('--keepflow-visual-offset-top');
+          editorModal.style.removeProperty('--keepflow-keyboard-inset');
           closeMobileActionsMenu();
           savedEditorRange = null;
           
@@ -3097,6 +3237,22 @@
           //    langsung dikirim ke server Apps Script dan diperbarui di Google Drive
           syncToBackend();
         }
+      } else if (!editorModal.classList.contains('hidden')) {
+        const hasDraftContent = hasUnsavedEditorChanges() || Boolean(readEditorDraft());
+        const message = hasDraftContent
+          ? 'Buang catatan baru dan draft lokal ini? Tindakan ini tidak dapat dibatalkan.'
+          : 'Tutup editor catatan baru?';
+        if (!confirm(message)) return;
+        clearEditorDraft();
+        closeEditorModal();
+        editorModal.classList.remove('editor-content-active', 'editor-formatting-mode');
+        editorModal.style.removeProperty('--keepflow-visual-height');
+        editorModal.style.removeProperty('--keepflow-visual-offset-top');
+        editorModal.style.removeProperty('--keepflow-keyboard-inset');
+        closeMobileActionsMenu();
+        savedEditorRange = null;
+        activeNoteId = null;
+        editorBaseline = null;
       } else {
         alert('Tidak ada catatan yang sedang aktif untuk dihapus.');
       }

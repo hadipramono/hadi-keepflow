@@ -205,7 +205,7 @@
         </div>
 
         <div class="p-4 border-t border-gray-200 dark:border-gray-700 text-xs text-gray-400 text-center shrink-0">
-          Hadi KeepFlow v1.3.6 • PKM Workspace
+          Hadi KeepFlow v1.3.7 • PKM Workspace
         </div>
       </aside>
 
@@ -353,10 +353,10 @@
   </div>
 
   <!-- Fullscreen Focus Modal Editor -->
-  <div id="editor-modal" class="fixed inset-0 z-50 bg-white dark:bg-gray-900 hidden flex flex-col">
+  <div id="editor-modal" class="fixed inset-0 z-50 bg-white dark:bg-gray-900 hidden flex flex-col" role="dialog" aria-modal="true" aria-label="Editor catatan" aria-describedby="editor-draft-status" tabindex="-1">
     <!-- Modal Header -->
     <div class="h-16 border-b border-gray-200 dark:border-gray-800 px-4 sm:px-6 flex items-center justify-between shrink-0">
-      <button id="modal-close-btn" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
+      <button id="modal-close-btn" type="button" aria-label="Tutup editor" class="min-w-[44px] min-h-[44px] p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">
         <i class="fa-solid fa-arrow-left text-lg"></i>
       </button>
 
@@ -388,16 +388,59 @@
       </div>
     </div>
 
-    <!-- Formatting Toolbar -->
-    <div id="editor-format-region" class="editor-format-region shrink-0">
-      <div class="editor-format-controls md:hidden px-3 py-1.5 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-        <button id="editor-format-toggle" type="button" class="min-h-[44px] inline-flex items-center gap-2 px-3 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800" aria-expanded="false" aria-controls="editor-toolbar">
-          <i class="fa-solid fa-text-height text-blue-600 dark:text-blue-400"></i>
-          <span>Format</span>
-          <i id="editor-format-toggle-icon" class="fa-solid fa-chevron-down text-xs text-gray-400"></i>
-        </button>
+    <!-- Modal Body -->
+    <div class="editor-modal-body flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-8 max-w-4xl mx-auto w-full custom-scrollbar flex flex-col">
+      <div class="editor-metadata-row flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
+        <select id="modal-category-select" class="bg-gray-100 dark:bg-gray-800 border-0 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium focus:ring-2 focus:ring-blue-500">
+        </select>
+        <div class="flex items-center gap-2 sm:ml-auto">
+          <label class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span class="sr-only">Template catatan</span>
+            <select id="editor-template-select" class="bg-gray-100 dark:bg-gray-800 border-0 rounded-xl px-3 py-2 text-xs text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500" aria-label="Gunakan template catatan">
+              <option value="">Pilih template...</option>
+            </select>
+          </label>
+          <button id="manage-templates-btn" type="button" class="px-3 py-2 rounded-xl text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40" title="Kelola template">
+            <i class="fa-solid fa-sliders mr-1"></i> Kelola
+          </button>
+        </div>
       </div>
-      <div id="editor-toolbar" role="toolbar" aria-label="Pemformatan catatan" class="bg-gray-50 dark:bg-gray-800/60 border-b border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 flex flex-nowrap items-center gap-1 shrink-0">
+
+      <input type="text" id="modal-title-input" aria-label="Judul catatan" placeholder="Judul" class="w-full text-2xl sm:text-3xl font-bold bg-transparent border-0 focus:ring-0 px-0 mb-3 sm:mb-4 text-gray-900 dark:text-white placeholder-gray-400">
+      
+      <div id="modal-timestamps" class="text-xs text-gray-400 mb-2 flex flex-wrap gap-x-4 gap-y-1">
+        <span id="meta-created">Dibuat: -</span>
+        <span id="meta-updated">Diubah: -</span>
+      </div>
+      <div id="editor-draft-status" class="text-xs text-gray-400 mb-3" role="status" aria-live="polite">Perubahan tersimpan lokal saat Anda mengetik.</div>
+
+      <div id="editor-content-editable" contenteditable="true" role="textbox" aria-label="Isi catatan" aria-multiline="true" spellcheck="true" placeholder="Tulis catatan di sini..." class="editor-content w-full flex-none bg-transparent border-0 focus:ring-0 px-0 text-base sm:text-lg text-gray-700 dark:text-gray-200 focus:outline-none min-h-[250px] outline-none"></div>
+      <div id="editor-metrics" class="mt-3 flex-none flex items-center justify-between gap-3 text-[11px] text-gray-400" aria-live="polite">
+        <span id="editor-word-count">0 kata</span>
+        <span id="editor-char-count">0 karakter</span>
+        <span id="editor-task-count">0/0 tugas</span>
+      </div>
+
+      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex-none flex items-center space-x-2">
+        <i class="fa-solid fa-tag text-gray-400 text-sm"></i>
+        <input type="text" id="modal-tags-input" placeholder="Tambah tag (pisahkan dengan koma)..." class="w-full text-sm bg-transparent border-0 focus:ring-0 text-gray-600 dark:text-gray-300 placeholder-gray-400">
+      </div>
+    </div>
+
+    <!-- Adaptive bottom composer: quick actions by default, full formatting controls on demand. -->
+    <div id="editor-bottom-dock" class="editor-bottom-dock shrink-0" aria-label="Kontrol editor">
+      <div id="editor-composer-toolbar" class="editor-composer-toolbar" role="toolbar" aria-label="Aksi cepat editor">
+        <button type="button" id="mobile-insert-checklist-btn" class="editor-action-btn" aria-label="Sisipkan checklist" title="Sisipkan checklist"><i class="fa-regular fa-square-check"></i></button>
+        <button type="button" id="mobile-insert-link-btn" class="editor-action-btn" aria-label="Sisipkan tautan" title="Sisipkan tautan"><i class="fa-solid fa-link"></i></button>
+        <button type="button" id="mobile-open-formatting-btn" class="editor-action-btn editor-format-launch" aria-label="Buka pemformatan" aria-pressed="false" title="Pemformatan"><i class="fa-solid fa-font"></i><span>Format</span></button>
+      </div>
+      <div id="editor-format-region" class="editor-format-region" aria-label="Toolbar pemformatan">
+        <div class="editor-format-heading">
+          <button type="button" id="mobile-format-back-btn" class="editor-action-btn" aria-label="Kembali ke aksi editor" title="Kembali"><i class="fa-solid fa-arrow-left"></i></button>
+          <span>Pemformatan</span>
+        </div>
+        <div id="editor-toolbar" role="toolbar" aria-label="Pemformatan catatan" class="bg-gray-50 dark:bg-gray-800/60 border-t border-gray-200 dark:border-gray-800 px-3 sm:px-4 py-2 flex flex-nowrap items-center gap-1 shrink-0">
       <button type="button" data-command="undo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Urungkan (Ctrl+Z)" aria-label="Urungkan"><i class="fa-solid fa-rotate-left"></i></button>
       <button type="button" data-command="redo" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Ulangi (Ctrl+Y)" aria-label="Ulangi"><i class="fa-solid fa-rotate-right"></i></button>
       <div class="w-px h-5 bg-gray-300 dark:bg-gray-700 mx-1"></div>
@@ -420,45 +463,6 @@
       <button type="button" data-command="removeFormat" class="toolbar-btn p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm" title="Hapus format"><i class="fa-solid fa-eraser"></i></button>
       </div>
     </div>
-
-    <!-- Modal Body -->
-    <div class="editor-modal-body flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 sm:p-8 max-w-4xl mx-auto w-full custom-scrollbar flex flex-col">
-      <div class="editor-metadata-row flex flex-col sm:flex-row sm:items-center gap-2 mb-4">
-        <select id="modal-category-select" class="bg-gray-100 dark:bg-gray-800 border-0 rounded-xl px-3 py-2 text-sm text-gray-700 dark:text-gray-300 font-medium focus:ring-2 focus:ring-blue-500">
-        </select>
-        <div class="flex items-center gap-2 sm:ml-auto">
-          <label class="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
-            <i class="fa-solid fa-wand-magic-sparkles"></i>
-            <span class="sr-only">Template catatan</span>
-            <select id="editor-template-select" class="bg-gray-100 dark:bg-gray-800 border-0 rounded-xl px-3 py-2 text-xs text-gray-700 dark:text-gray-300 focus:ring-2 focus:ring-blue-500" aria-label="Gunakan template catatan">
-              <option value="">Pilih template...</option>
-            </select>
-          </label>
-          <button id="manage-templates-btn" type="button" class="px-3 py-2 rounded-xl text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/40" title="Kelola template">
-            <i class="fa-solid fa-sliders mr-1"></i> Kelola
-          </button>
-        </div>
-      </div>
-
-      <input type="text" id="modal-title-input" placeholder="Judul" class="w-full text-2xl sm:text-3xl font-bold bg-transparent border-0 focus:ring-0 px-0 mb-3 sm:mb-4 text-gray-900 dark:text-white placeholder-gray-400">
-      
-      <div id="modal-timestamps" class="text-xs text-gray-400 mb-2 flex flex-wrap gap-x-4 gap-y-1">
-        <span id="meta-created">Dibuat: -</span>
-        <span id="meta-updated">Diubah: -</span>
-      </div>
-      <div id="editor-draft-status" class="text-xs text-gray-400 mb-3" role="status" aria-live="polite">Perubahan tersimpan lokal saat Anda mengetik.</div>
-
-      <div id="editor-content-editable" contenteditable="true" role="textbox" aria-label="Isi catatan" aria-multiline="true" spellcheck="true" placeholder="Tulis catatan di sini..." class="editor-content w-full flex-none bg-transparent border-0 focus:ring-0 px-0 text-base sm:text-lg text-gray-700 dark:text-gray-200 focus:outline-none min-h-[250px] outline-none"></div>
-      <div id="editor-metrics" class="mt-3 flex-none flex items-center justify-between gap-3 text-[11px] text-gray-400" aria-live="polite">
-        <span id="editor-word-count">0 kata</span>
-        <span id="editor-char-count">0 karakter</span>
-        <span id="editor-task-count">0/0 tugas</span>
-      </div>
-
-      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800 flex-none flex items-center space-x-2">
-        <i class="fa-solid fa-tag text-gray-400 text-sm"></i>
-        <input type="text" id="modal-tags-input" placeholder="Tambah tag (pisahkan dengan koma)..." class="w-full text-sm bg-transparent border-0 focus:ring-0 text-gray-600 dark:text-gray-300 placeholder-gray-400">
-      </div>
     </div>
 
   </div>

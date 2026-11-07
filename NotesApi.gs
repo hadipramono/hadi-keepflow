@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.3.6 backend module.
+ * Hadi KeepFlow v1.3.7 backend module.
  * Apps Script .gs files share one global namespace.
  */
 
@@ -275,10 +275,9 @@ function createCategoryFolder(categoryName) {
 }
 
 /**
- * Delete a category by moving its direct files to the Inbox root.
- * No file is trashed or recreated. Nested folders are deliberately rejected
- * so the operation never silently changes an unknown folder hierarchy.
- * Safe to retry after a partial Drive parent update.
+ * Delete an empty category folder only.
+ * Notes and other files must be moved/removed explicitly before this operation.
+ * The check and trash operation are protected by the script lock.
  */
 function deleteCategoryFolder(categoryName) {
   const rawCategory = String(categoryName == null ? '' : categoryName).trim();
@@ -290,7 +289,7 @@ function deleteCategoryFolder(categoryName) {
     return { status: 'error', message: 'Nama kategori tidak valid.' };
   }
   if (category.toLocaleLowerCase() === 'umum') {
-    return { status: 'error', message: 'Folder Umum adalah sumber migrasi Inbox dan tidak dapat dihapus melalui pengelolaan kategori.' };
+    return { status: 'error', message: 'Kategori Umum tidak dapat dihapus.' };
   }
 
   const lock = LockService.getScriptLock();
@@ -306,106 +305,36 @@ function deleteCategoryFolder(categoryName) {
     if (childFolders.hasNext()) {
       return {
         status: 'error',
-        message: 'Kategori memiliki subfolder. Pindahkan atau rapikan subfolder tersebut terlebih dahulu; tidak ada data yang diubah.'
+        message: 'Kategori masih memiliki subfolder. Kosongkan kategori terlebih dahulu; tidak ada data yang diubah.'
       };
     }
 
     const iterator = folder.getFiles();
-    const files = [];
+    let remainingFiles = 0;
     while (iterator.hasNext()) {
       const file = iterator.next();
-      if (!file.isTrashed()) files.push(file);
+      if (!file.isTrashed()) remainingFiles++;
+    }
+    if (remainingFiles > 0) {
+      return {
+        status: 'error',
+        message: 'Kategori masih memiliki ' + remainingFiles + ' file. Pindahkan atau hapus seluruh catatan/file terlebih dahulu. Tidak ada data yang diubah.',
+        remainingFiles: remainingFiles
+      };
     }
 
-    let filesMoved = 0;
-    let filesAlreadyInInbox = 0;
-    const errors = [];
-    const skippedFiles = [];
-
-    files.forEach(file => {
-      if (!/\.(md|txt)$/i.test(file.getName())) {
-        skippedFiles.push(file.getName());
-        return;
-      }
-      try {
-        const parentsIterator = file.getParents();
-        const parentIds = [];
-        const parentFolders = [];
-        while (parentsIterator.hasNext()) {
-          const parent = parentsIterator.next();
-          parentIds.push(parent.getId());
-          parentFolders.push(parent);
-        }
-
-        const hasStorage = parentIds.includes(storage.getId());
-        const hasCategory = parentIds.includes(folder.getId());
-        const unexpected = parentFolders.filter(parent =>
-          parent.getId() !== storage.getId() &&
-          parent.getId() !== folder.getId()
-        );
-
-        if (unexpected.length || (!hasStorage && !hasCategory)) {
-          throw new Error('Parent file tidak sesuai struktur kategori KeepFlow.');
-        }
-
-        if (hasStorage && hasCategory) {
-          folder.removeFile(file);
-          filesAlreadyInInbox++;
-          return;
-        }
-
-        if (hasStorage && !hasCategory) {
-          filesAlreadyInInbox++;
-          return;
-        }
-
-        // Add destination before removing source. If execution stops between
-        // these calls, the next run recognizes both parents and completes it.
-        storage.addFile(file);
-        folder.removeFile(file);
-        filesMoved++;
-      } catch (error) {
-        errors.push({
-          file: file.getName(),
-          message: String(error && error.message || error)
-        });
-      }
-    });
-
-    const remainingFilesIterator = folder.getFiles();
-    const remainingFileNames = [];
-    while (remainingFilesIterator.hasNext()) remainingFileNames.push(remainingFilesIterator.next().getName());
-    const hasRemainingFiles = remainingFileNames.length > 0;
-    const remainingFolders = folder.getFolders();
-    const hasRemainingFolders = remainingFolders.hasNext();
-
-    let folderTrashed = false;
-    if (!hasRemainingFiles && !hasRemainingFolders && !errors.length) {
-      try {
-        folder.setTrashed(true);
-        folderTrashed = true;
-      } catch (error) {
-        errors.push({
-          file: folder.getName(),
-          message: 'Catatan sudah dipindahkan, tetapi folder gagal dipindahkan ke Sampah: ' +
-            String(error && error.message || error)
-        });
-      }
-    }
-
-    const categories = getCategories();
+    folder.setTrashed(true);
     return {
-      status: errors.length || hasRemainingFiles || hasRemainingFolders ? 'partial' : 'success',
+      status: 'success',
       category: category,
-      filesMoved: filesMoved,
-      filesAlreadyInInbox: filesAlreadyInInbox,
-      notesMoved: filesMoved,
-      folderTrashed: folderTrashed,
-      remainingFiles: remainingFileNames.length,
-      remainingFolders: hasRemainingFolders ? 1 : 0,
-      skippedFiles: skippedFiles, remainingFileNames: remainingFileNames,
-      categories: categories,
-      errors: errors
+      folderTrashed: true,
+      filesMoved: 0,
+      filesAlreadyInInbox: 0,
+      notesMoved: 0,
+      remainingFiles: 0,
+      remainingFolders: 0,
+      categories: getCategories(),
+      errors: []
     };
   } finally {
     lock.releaseLock();

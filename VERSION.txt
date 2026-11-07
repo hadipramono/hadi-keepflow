@@ -1,3 +1,3 @@
 Application version: v1.3.7
-Release status: implementation candidate; live device and production stability are not yet validated.
-Release gate: complete all required live GAS/Drive and real-device QA before production deployment/tagging.
+Stabilization: R1 Editor & Category + R2 Mobile UX & Accessibility
+Release status: candidate; browser, Apps Script, Google Drive, and real-device validation remain pending.

@@ -1,0 +1,9 @@
+feat(editor): stabilize mobile UX and accessibility
+
+- add accessible modal semantics and labels
+- trap keyboard focus and restore focus after closing editor
+- improve mobile initial focus and Escape handling
+- centralize editor close lifecycle
+- preserve R1 category deletion safeguards
+- align application version metadata to v1.3.7
+- consolidate project documentation

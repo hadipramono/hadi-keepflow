@@ -1,16 +1,21 @@
-# Changelog — v1.3.6
+# Changelog
 
-- Prepared the stable version metadata from the latest complete Phase 8 source snapshot.
-- Retained the Phase 7 dashboard rendering optimization.
-- Preserved Google Drive as the source of truth and LocalStorage for cache, draft, and offline queue.
-- No new product features or architectural changes.
-- Release QA findings, verification boundaries, and unresolved live gates are documented in `RELEASE-AUDIT.md` and `TEST-CHECKLIST.md`.
+## v1.3.7 — Stabilization candidate (R1 + R2)
 
-## v1.3.7 — Mobile Editor Experience (candidate)
+### R1 — Editor & category stabilization
+- Memperbaiki aturan `hidden` pada editor modal agar modal benar-benar tersembunyi saat ditutup.
+- Kategori `Umum` dilindungi dari penghapusan.
+- Penghapusan kategori ditolak jika masih ada file catatan atau subfolder.
+- Tidak ada pemindahan atau penghapusan catatan saat kategori tidak kosong.
 
-- Added a collapsed-by-default mobile formatting toolbar with a `Format` toggle and horizontal scrolling when expanded.
-- Added a mobile overflow menu for Pin, Archive/Restore, and Delete while keeping Save visible.
-- Improved mobile editor spacing, touch targets, and visual viewport handling for virtual keyboard changes.
-- Preserved editor selection around formatting and checklist interactions.
-- Kept desktop toolbar behavior and existing backend/storage contracts unchanged.
-- Automated source and regression checks passed; real-device and live Apps Script verification remain outstanding.
+### R2 — Mobile UX & accessibility
+- Editor modal memiliki semantics dialog: `role="dialog"`, `aria-modal`, label, dan deskripsi.
+- Tombol tutup editor memiliki accessible name dan target sentuh minimum 44px.
+- Focus awal editor disesuaikan: desktop ke area konten, mobile ke tombol tutup agar keyboard virtual tidak terbuka otomatis.
+- Fokus dikembalikan ke elemen yang membuka editor setelah modal ditutup.
+- Tab dan Shift+Tab dijaga tetap berada di dalam modal (focus trap).
+- Escape menutup menu tindakan mobile terlebih dahulu; Escape berikutnya menjalankan alur tutup editor yang sudah meminta konfirmasi bila diperlukan.
+- Seluruh jalur tutup editor menggunakan lifecycle penutupan terpusat.
+
+### Riwayat fitur sebelumnya
+Fitur utama yang telah dikembangkan pada versi sebelumnya meliputi Temporary Inbox, navigasi workspace, kategori, backup/restore, pencarian, organisasi catatan, template, checklist, dashboard, dan sinkronisasi offline. Detail historis per fase sebelumnya diringkas di sini agar changelog repository tetap ringkas.
