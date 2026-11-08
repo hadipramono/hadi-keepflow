@@ -3,37 +3,49 @@
  * Apps Script .gs files share one global namespace.
  */
 
+/**
+ * Read every note under storage/ in one pass. Root files (Inbox) come first,
+ * then each category folder; a legacy "Umum" folder is treated as Inbox.
+ * A partially completed Drive move can expose one file through two parents, so
+ * results are de-duplicated by immutable Drive file ID (first one wins, which
+ * prefers the storage root).
+ */
+function collectAllNotes_(storage) {
+  const result = [];
+  collectFolderNotes(storage, '', result);
+
+  const categories = new Set();
+  const folders = storage.getFolders();
+  while (folders.hasNext()) {
+    const folder = folders.next();
+    if (folder.isTrashed()) continue;
+    const folderName = folder.getName();
+    const category = folderName.toLocaleLowerCase() === 'umum' ? '' : folderName;
+    if (category) categories.add(category);
+    collectFolderNotes(folder, category, result);
+  }
+
+  const unique = new Map();
+  result.forEach(note => {
+    const id = String(note.id);
+    if (!unique.has(id)) unique.set(id, note);
+  });
+  return {
+    notes: Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
+    categories: Array.from(categories).sort((a, b) => a.localeCompare(b, 'id'))
+  };
+}
+
 function getNotes() {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const storage = getStorageFolder();
-    const result = [];
-    collectFolderNotes(storage, '', result);
-
-    const folders = storage.getFolders();
-    while (folders.hasNext()) {
-      const folder = folders.next();
-      if (folder.isTrashed()) continue;
-      // A legacy Umum folder remains an Inbox source until migration finishes.
-      const category = folder.getName().toLocaleLowerCase() === 'umum' ? '' : folder.getName();
-      collectFolderNotes(folder, category, result);
-    }
-
-    // A partially completed Drive move can briefly expose the same file through
-    // both parents. De-duplicate by immutable Drive file ID.
-    const unique = new Map();
-    // Root files are collected first. Prefer that representation when a Drive
-    // move is interrupted and the same file temporarily has two parents.
-    result.forEach(note => {
-      const id = String(note.id);
-      if (!unique.has(id)) unique.set(id, note);
-    });
-    return Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    return collectAllNotes_(getStorageFolder()).notes;
   } finally {
     lock.releaseLock();
   }
 }
+
 /**
  * Return notes and category names from one locked Drive snapshot for backup.
  * This prevents category and note lists from being read at different moments.
@@ -42,35 +54,12 @@ function getBackupSnapshot() {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const storage = getStorageFolder();
-    const result = [];
-    collectFolderNotes(storage, '', result);
-
-    const categories = new Set();
-    const folders = storage.getFolders();
-    while (folders.hasNext()) {
-      const folder = folders.next();
-      if (folder.isTrashed()) continue;
-      const folderName = folder.getName();
-      const category = folderName.toLocaleLowerCase() === 'umum' ? '' : folderName;
-      if (category) categories.add(category);
-      collectFolderNotes(folder, category, result);
-    }
-
-    const unique = new Map();
-    // Prefer storage-root (Inbox) when a partially completed move exposes
-    // one Drive file through both storage/ and its former category folder.
-    result.forEach(note => {
-      const id = String(note.id);
-      if (!unique.has(id)) unique.set(id, note);
-    });
-    const notes = Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    const categoryList = Array.from(categories).sort((a, b) => a.localeCompare(b, 'id'));
+    const snapshot = collectAllNotes_(getStorageFolder());
     return {
       generatedAt: new Date().toISOString(),
-      notes: notes,
-      categories: categoryList,
-      noteCount: notes.length
+      notes: snapshot.notes,
+      categories: snapshot.categories,
+      noteCount: snapshot.notes.length
     };
   } finally {
     lock.releaseLock();
@@ -402,7 +391,12 @@ function validateNotePayload(note) {
     throw new Error('Tag catatan tidak valid.');
   }
 
-  const title = safeName(note.title, 'Catatan Tanpa Judul');
+  // The title is stored as typed (front matter); only the Drive file name is
+  // sanitised (see buildUniqueFileName), so "Roma 8: Ayat 1" stays intact.
+  const title = String(note.title == null ? '' : note.title)
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim() || 'Catatan Tanpa Judul';
   const rawCategory = note.category == null ? '' : String(note.category).trim();
   // Legacy v1.3.5 payloads used "Umum" for uncategorized notes.
   const category = !rawCategory || rawCategory.toLocaleLowerCase() === 'umum'
@@ -419,7 +413,7 @@ function validateNotePayload(note) {
     throw new Error('Daftar tag tidak valid (maksimal 50 tag, masing-masing 60 karakter).');
   }
 
-  return { title: title, category: category, content: content, tags: tags };
+  return { title: title, category: category, content: content, tags: tags.map(tag => tag.trim()).filter(Boolean) };
 }
 
 function saveNote(note, operationId) {
@@ -477,13 +471,13 @@ function saveNote(note, operationId) {
     const fileName = buildUniqueFileName(folder, validated.title, file ? file.getId() : null);
     const now = new Date().toISOString();
     const metadata = {
+      title: validated.title,
       isPinned: toBoolean(note.isPinned),
       isArchived: toBoolean(note.isArchived),
       tags: validated.tags,
-      createdAt: note.createdAt || now
+      createdAt: validIsoDate_(note.createdAt) || now
     };
-    const fileContent = '---JSON---\n' + JSON.stringify(metadata, null, 2) +
-      '\n---JSON---\n\n' + validated.content;
+    const fileContent = serializeNoteFile(metadata, validated.content);
 
     if (file) {
       const oldParent = assertFileBelongsToStorage(file, storage);
@@ -502,7 +496,7 @@ function saveNote(note, operationId) {
       status: 'success',
       note: {
         id: file.getId(),
-        title: fileName.replace(/\.md$/i, ''),
+        title: validated.title,
         content: validated.content,
         category: effectiveCategory,
         isPinned: metadata.isPinned,
@@ -560,25 +554,3 @@ function deleteNote(fileId, expectedUpdatedAt, operationId) {
     lock.releaseLock();
   }
 }
-
-// Backward compatibility for older deployed frontend versions.
-// This function intentionally does not delete files omitted from the payload.
-
-// Backward compatibility for older deployed frontend versions.
-// This function intentionally does not delete files omitted from the payload.
-function saveNotes(notes) {
-  if (!Array.isArray(notes)) throw new Error('Daftar catatan tidak valid.');
-  const saved = notes.map(note => {
-    const result = saveNote(note);
-    if (!result || result.status !== 'success') {
-      throw new Error('Penyimpanan batch dihentikan karena konflik versi. Gunakan saveNote untuk menyelesaikan konflik satu per satu.');
-    }
-    return result.note;
-  });
-  return { status: 'success', notes: saved };
-}
-
-function deleteNoteFromFile(fileId) {
-  return deleteNote(fileId);
-}
-

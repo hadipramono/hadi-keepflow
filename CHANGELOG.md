@@ -4,6 +4,28 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/). Se
 
 ## v1.3.8 — 2026-11-08 (kandidat)
 
+### Keamanan
+- **XSS pada pratinjau/pencarian ditutup.** `getPlainText` kini memakai `DOMParser` (dokumen inert) alih-alih `innerHTML`; sebelumnya `<img onerror>` di konten catatan tetap dijalankan walau elemennya tidak terpasang.
+- Konten dari restore ZIP kini disanitasi sebelum disimpan ke Drive; teks polos/Markdown dibungkus paragraf dan di-escape.
+- `include()` hanya mengizinkan partial `AppStyles` dan `AppScripts`.
+- Fungsi legacy `saveNotes` dan `deleteNoteFromFile` dihapus (tidak dipakai frontend).
+
+### Format dan penyimpanan
+- **Format file catatan v2:** front matter YAML standar (`keepflow`, `title`, `created`, `pinned`, `archived`, `tags`, `content_type`) menggantikan blok `---JSON---`. File lama tetap terbaca dan ditingkatkan saat disimpan berikutnya; tidak ada migrasi massal. Detail di [`AUDIT.md`](AUDIT.md) dan `NoteFormat.gs`.
+- Judul asli disimpan di front matter: karakter seperti `:` atau `?` dan suffix ` (1)` pada nama file tidak lagi mengubah judul tampilan.
+- Backup ZIP memakai skema 2 (membaca skema 1 dan 2). `createdAt` divalidasi; karakter kontrol pada judul dibuang.
+- Receipt idempotensi bersifat best-effort dan tahan kuota `PropertiesService` (sebelumnya restore ZIP besar dapat menyebabkan catatan ganda); pruning dibatasi maksimal sekali per jam.
+- `getNotes` dan `getBackupSnapshot` memakai satu pembaca (`collectAllNotes_`).
+
+### UI/UX dan aksesibilitas
+- Pratinjau dan pencarian memisahkan paragraf/item checklist dengan benar (☐/☑); sebelumnya kata antar-blok menyatu.
+- Notifikasi non-blokir (toast) menggantikan 27 `alert()`.
+- Hasil axe-core: 0 pelanggaran pada daftar catatan dan editor (desktop/mobile, terang/gelap); sebelumnya 3-5 jenis. Perbaikan: kontras teks abu-abu di tema terang, ARIA kolom cari, nama tombol Inbox, label checkbox checklist, role loader.
+
+### Rekayasa
+- Tes otomatis tanpa dependensi (`node --test tests/*.test.js`, 35 tes): sintaks, kontrak klien-server, format v2 (uji silang klien/server termasuk uji acak), dan logika backend dengan tiruan Drive.
+- `appsscript.json` (V8, scope `drive` saja, web app "Only myself") dan workflow GitHub Actions.
+
 ### Diperbaiki
 - **Dock editor mobile tertutup keyboard virtual di Android.** Penyebab yang paling mungkin (disimpulkan dari perilaku platform; belum dikonfirmasi di perangkat nyata): Apps Script merender `Index.html` di dalam iframe sandbox, dan browser hanya membaca meta viewport dari halaman luar (yang dipasang lewat `addMetaTag` di `Code.gs`). Tanpa `interactive-widget`, Chrome Android (108+) membiarkan keyboard menimpa halaman tanpa memberi tahu iframe. Meta viewport kini `width=device-width, initial-scale=1, interactive-widget=resizes-content`, sehingga iframe ikut mengecil saat keyboard muncul.
 - Dock editor mobile kini berupa elemen *in-flow* di dasar modal (bukan `absolute`/`fixed`). Area tulis berakhir tepat di atas dock tanpa tumpang tindih dan tanpa kompensasi padding.

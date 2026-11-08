@@ -1,8 +1,8 @@
 /**
  * Hadi KeepFlow v1.3.8
  * Google Apps Script web entry point and shared utilities.
- * Backend modules: DriveStorage.gs, SyncOperations.gs, NotesApi.gs.
- * Storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md
+ * Backend modules: DriveStorage.gs, SyncOperations.gs, NoteFormat.gs, NotesApi.gs.
+ * Storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md (YAML front matter + HTML body)
  *
  * Security rule: existing Drive files must belong to the KeepFlow storage
  * folder or one of its direct category folders. A narrowly scoped two-parent
@@ -42,7 +42,16 @@ function toBoolean(value) {
   return false;
 }
 
-/** Include an HTML partial in the main Apps Script template. */
+/**
+ * Include an HTML partial in the main Apps Script template.
+ * Every public function can be called from the browser through
+ * google.script.run, so only the known partials are allowed.
+ */
+var INCLUDABLE_PARTIALS = ['AppStyles', 'AppScripts'];
+
 function include(filename) {
+  if (INCLUDABLE_PARTIALS.indexOf(filename) === -1) {
+    throw new Error('Partial tidak diizinkan: ' + filename);
+  }
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }

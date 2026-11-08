@@ -2,8 +2,8 @@
 
 Jalankan pada deployment Apps Script **terpisah** dengan folder Drive uji dan data sintetis. Centang hanya setelah benar-benar dijalankan. Setiap item belum diverifikasi pada perangkat nyata sampai dicentang di sini atau di catatan rilis.
 
-## 0. Pemeriksaan sintaks (otomatis)
-- [ ] Setiap file `.gs` lolos pemeriksaan sintaks (mis. salin ke `.js` lalu `node --check`).
+## 0. Tes otomatis
+- [ ] `node --test tests/*.test.js` lulus (sintaks, kontrak klien-server, format v2, logika backend dengan tiruan Drive). Tes ini memakai tiruan Drive, **bukan** Drive nyata.
 - [ ] Script inline pada `AppScripts.html` dimuat tanpa error di konsol browser.
 
 ## 1. Deploy
@@ -28,6 +28,13 @@ Uji pada URL `/exec`, orientasi portrait dan landscape.
 
 **Desktop**
 - [ ] Toolbar pemformatan tetap berada di atas area tulis dan tidak berubah.
+
+## 2b. Format penyimpanan v2 (Drive nyata)
+- [ ] Catatan baru menghasilkan file `.md` berawalan `---` + `keepflow: 2` (buka file di Drive untuk memeriksa).
+- [ ] Judul dengan `:` atau `?` tampil utuh di aplikasi walau nama file memakai `-`.
+- [ ] Dua catatan berjudul sama: nama file memakai ` (1)` tetapi judul tampilan tidak berubah.
+- [ ] File lama berformat `---JSON---` terbuka dengan isi, tag, pin, dan tanggal yang benar, dan berubah ke v2 setelah disimpan.
+- [ ] Restore ZIP berisi konten berbahaya (`<img onerror>`, `<script>`) tidak menjalankan skrip dan konten dibersihkan.
 
 ## 3. Catatan dan kategori
 - [ ] Buat, ubah, pin, arsip, dan hapus catatan; file di Drive ikut berubah.

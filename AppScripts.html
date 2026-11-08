@@ -152,19 +152,19 @@
 
     function ensureCategoryManagementReady() {
       if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) {
-        alert('Pengelolaan kategori memerlukan koneksi internet.');
+        notify('Pengelolaan kategori memerlukan koneksi internet.');
         return false;
       }
       if (!serverReady || cloudLoadInProgress || syncRunning) {
-        alert('Tunggu sampai data cloud selesai dimuat dan sinkronisasi tidak sedang berjalan.');
+        notify('Tunggu sampai data cloud selesai dimuat dan sinkronisasi tidak sedang berjalan.');
         return false;
       }
       if (pendingOperations.length || pendingCategoryCreates.length) {
-        alert('Masih ada antrean sinkronisasi. Tunggu sampai semua perubahan tersinkron sebelum mengubah atau menghapus kategori.');
+        notify('Masih ada antrean sinkronisasi. Tunggu sampai semua perubahan tersinkron sebelum mengubah atau menghapus kategori.');
         return false;
       }
       if (hasUnsavedEditorChanges()) {
-        alert('Simpan atau batalkan draft editor terlebih dahulu sebelum mengubah kategori.');
+        notify('Simpan atau batalkan draft editor terlebih dahulu sebelum mengubah kategori.');
         return false;
       }
       return true;
@@ -174,7 +174,7 @@
       const name = String(categoryName || '').replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
       if (!name) return;
       if (name.toLocaleLowerCase() === 'umum') {
-        alert('Nama kategori tersebut tidak tersedia. Catatan tanpa kategori disimpan di Inbox.');
+        notify('Nama kategori tersebut tidak tersedia. Catatan tanpa kategori disimpan di Inbox.');
         return;
       }
       const existing = categories.find(item => item.toLowerCase() === name.toLowerCase());
@@ -206,12 +206,54 @@
       });
     }
 
+    // Non-blocking message that replaces window.alert(): it does not freeze the
+    // page (important inside the Apps Script iframe) and is announced to screen
+    // readers. Warnings stay longer and use role="alert".
+    function notify(message, kind) {
+      const text = String(message == null ? '' : message).trim();
+      if (!text) return;
+      const type = kind || (/(gagal|tidak (dapat|valid|boleh|tersedia|memenuhi|selesai)|terlalu|wajib|masih ada|tunggu|memerlukan|belum|pilih )/i.test(text)
+        ? 'warn'
+        : (/(berhasil|selesai)/i.test(text) ? 'success' : 'info'));
+      const region = document.getElementById('toast-region');
+      if (!region) { window.alert(text); return; }
+
+      const toast = document.createElement('div');
+      toast.className = 'kf-toast kf-toast-' + type;
+      toast.setAttribute('role', type === 'warn' ? 'alert' : 'status');
+      const body = document.createElement('p');
+      body.className = 'kf-toast-text';
+      body.textContent = text;
+      const close = document.createElement('button');
+      close.type = 'button';
+      close.className = 'kf-toast-close';
+      close.setAttribute('aria-label', 'Tutup notifikasi');
+      close.textContent = '\u00d7';
+      const dismiss = () => { clearTimeout(timer); toast.remove(); };
+      close.addEventListener('click', dismiss);
+      toast.append(body, close);
+      region.appendChild(toast);
+      while (region.children.length > 4) region.firstElementChild.remove();
+      const lifetime = type === 'warn' ? Math.min(15000, 6000 + text.length * 40) : Math.min(8000, 3500 + text.length * 30);
+      const timer = setTimeout(dismiss, lifetime);
+    }
+
+    // Checklist checkboxes live inside contenteditable HTML whose attributes are
+    // stripped on save, so the accessible name is applied at edit time only.
+    function labelEditorCheckboxes(editor) {
+      if (!editor) return;
+      editor.querySelectorAll('input[type="checkbox"]:not([aria-label])').forEach(box => {
+        box.setAttribute('aria-label', 'Tandai selesai');
+      });
+    }
+
     function updateEditorMetrics() {
       const editor = document.getElementById('editor-content-editable');
       const wordNode = document.getElementById('editor-word-count');
       const charNode = document.getElementById('editor-char-count');
       const taskNode = document.getElementById('editor-task-count');
       if (!editor || !wordNode || !charNode) return;
+      labelEditorCheckboxes(editor);
       const text = String(editor.innerText || editor.textContent || '').replace(/\u00a0/g, ' ').trim();
       const words = text ? text.split(/\s+/u).filter(Boolean).length : 0;
       const tasks = [...editor.querySelectorAll('input[type="checkbox"]')];
@@ -258,7 +300,7 @@
         safeUrl = new URL(candidate);
         if (!['http:', 'https:', 'mailto:'].includes(safeUrl.protocol)) throw new Error('Skema URL tidak diizinkan');
       } catch (error) {
-        alert('URL tidak valid. Gunakan http://, https://, atau mailto:.');
+        notify('URL tidak valid. Gunakan http://, https://, atau mailto:.');
         editor.focus();
         return;
       }
@@ -1373,7 +1415,7 @@
           normalizeNoteCategory(note.category).toLocaleLowerCase() === category.toLocaleLowerCase()
         ).length;
         if (noteCount > 0) {
-          alert(
+          notify(
             'Kategori "' + category + '" masih memiliki ' + noteCount +
             ' catatan (termasuk catatan arsip). Pindahkan atau hapus catatan tersebut terlebih dahulu.'
           );
@@ -1391,7 +1433,7 @@
         google.script.run
           .withSuccessHandler(response => {
             if (!response || response.status !== 'success') {
-              alert((response && response.message) || 'Kategori gagal dihapus.');
+              notify((response && response.message) || 'Kategori gagal dihapus.');
               renderCategories();
               return;
             }
@@ -1403,12 +1445,12 @@
             }
 
             loadInitialData();
-            alert('Kategori berhasil dihapus. Tidak ada catatan yang dipindahkan atau dihapus.');
+            notify('Kategori berhasil dihapus. Tidak ada catatan yang dipindahkan atau dihapus.');
             setSyncStatus('Kategori kosong berhasil dihapus', 'fa-check', 'text-green-500');
           })
           .withFailureHandler(error => {
             console.error('KeepFlow delete category error:', error);
-            alert('Penghapusan kategori gagal: ' + (error && error.message ? error.message : 'Kesalahan server.'));
+            notify('Penghapusan kategori gagal: ' + (error && error.message ? error.message : 'Kesalahan server.'));
             renderCategories();
           })
           .deleteCategoryFolder(category);
@@ -1426,11 +1468,11 @@
         if (newCat == null) return;
         const formattedNewCat = newCat.replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
         if (!formattedNewCat) {
-          alert('Nama kategori tidak boleh kosong.');
+          notify('Nama kategori tidak boleh kosong.');
           return;
         }
         if (formattedNewCat.toLocaleLowerCase() === 'umum') {
-          alert('Nama kategori tersebut tidak tersedia.');
+          notify('Nama kategori tersebut tidak tersedia.');
           return;
         }
         if (formattedNewCat === oldCat) return;
@@ -1439,7 +1481,7 @@
           item.toLocaleLowerCase() !== oldCat.toLocaleLowerCase()
         );
         if (duplicate) {
-          alert('Kategori "' + duplicate + '" sudah ada.');
+          notify('Kategori "' + duplicate + '" sudah ada.');
           return;
         }
         if (!ensureCategoryManagementReady()) return;
@@ -1448,7 +1490,7 @@
         google.script.run
           .withSuccessHandler(response => {
             if (!response || response.status !== 'success') {
-              alert((response && response.message) || 'Nama kategori gagal diubah.');
+              notify((response && response.message) || 'Nama kategori gagal diubah.');
               renderCategories();
               return;
             }
@@ -1486,7 +1528,7 @@
           })
           .withFailureHandler(error => {
             console.error('KeepFlow rename category error:', error);
-            alert('Nama kategori gagal diubah: ' + (error && error.message ? error.message : 'Kesalahan server.'));
+            notify('Nama kategori gagal diubah: ' + (error && error.message ? error.message : 'Kesalahan server.'));
             renderCategories();
           })
           .renameCategoryFolder(oldCat, formattedNewCat);
@@ -1516,18 +1558,44 @@
       render();
     });
 
+    // Convert note HTML to preview/search text.
+    // SECURITY: DOMParser builds an inert document (no scripts, no image loads,
+    // no event handlers). Never assign untrusted HTML to element.innerHTML for
+    // this, even on a detached element: <img onerror> still fires there.
+    const PLAIN_TEXT_BLOCK_TAGS = new Set(['P', 'DIV', 'LI', 'UL', 'OL', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'HR', 'TR']);
+    function htmlToPlainText(html) {
+      const doc = new DOMParser().parseFromString(String(html || ''), 'text/html');
+      let out = '';
+      const walk = parent => {
+        parent.childNodes.forEach(child => {
+          if (child.nodeType === Node.TEXT_NODE) { out += child.nodeValue; return; }
+          if (child.nodeType !== Node.ELEMENT_NODE) return;
+          const tag = child.tagName;
+          if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEMPLATE') return;
+          if (tag === 'BR') { out += '\n'; return; }
+          if (tag === 'INPUT') {
+            if (String(child.getAttribute('type') || '').toLowerCase() === 'checkbox') {
+              out += child.hasAttribute('checked') ? '\u2611 ' : '\u2610 ';
+            }
+            return;
+          }
+          const isBlock = PLAIN_TEXT_BLOCK_TAGS.has(tag);
+          if (isBlock && out && !out.endsWith('\n')) out += '\n';
+          walk(child);
+          if (isBlock && out && !out.endsWith('\n')) out += '\n';
+        });
+      };
+      walk(doc.body);
+      return out.replace(/\u00a0/g, ' ').replace(/([\u2610\u2611])[ \t]+/g, '$1 ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    }
+
     function getPlainText(note) {
       if (!note || typeof note !== 'object') return '';
       const source = typeof note.content === 'string' ? note.content : '';
       const cached = plainTextCache.get(note);
       if (cached && cached.source === source) return cached.text;
 
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = source;
-      tempDiv.querySelectorAll('input[type="checkbox"]').forEach(input => {
-        input.replaceWith(document.createTextNode(input.checked || input.hasAttribute('checked') ? '[x] ' : '[ ] '));
-      });
-      const text = tempDiv.textContent || tempDiv.innerText || '';
+      const text = htmlToPlainText(source);
       plainTextCache.set(note, { source, text, lower: text.toLowerCase() });
       return text;
     }
@@ -1815,12 +1883,10 @@
       renderRecentSearches();
       const panel = document.getElementById('recent-search-panel');
       panel.classList.remove('hidden');
-      document.getElementById('search-input').setAttribute('aria-expanded', 'true');
     }
 
     function hideRecentSearches() {
       document.getElementById('recent-search-panel').classList.add('hidden');
-      document.getElementById('search-input').setAttribute('aria-expanded', 'false');
     }
 
     function render() {
@@ -2299,9 +2365,9 @@
       const name = document.getElementById('template-name-input').value.trim();
       const title = document.getElementById('template-title-input').value.trim();
       const content = sanitizeEditorHTML(document.getElementById('template-content-editor').innerHTML);
-      if (!name) { alert('Nama template wajib diisi.'); return; }
-      if (!title) { alert('Judul catatan wajib diisi.'); return; }
-      if (!content.trim()) { alert('Isi template tidak boleh kosong.'); return; }
+      if (!name) { notify('Nama template wajib diisi.'); return; }
+      if (!title) { notify('Judul catatan wajib diisi.'); return; }
+      if (!content.trim()) { notify('Isi template tidak boleh kosong.'); return; }
       const templates = getProductivityTemplates();
       let key = editingTemplateKey;
       if (!key) {
@@ -2313,7 +2379,7 @@
       saveProductivityTemplates(templates);
       editingTemplateKey = key;
       refreshTemplateManagerList(key);
-      alert('Template berhasil disimpan di browser ini.');
+      notify('Template berhasil disimpan di browser ini.');
     }
 
     function deleteTemplateFromManager() {
@@ -2506,11 +2572,11 @@
       const tags = normalizeTags(document.getElementById('modal-tags-input').value);
 
       if (content.length > 500000) {
-        alert('Isi catatan terlalu besar. Maksimal 500.000 karakter.');
+        notify('Isi catatan terlalu besar. Maksimal 500.000 karakter.');
         return;
       }
       if (title.length > 180) {
-        alert('Judul terlalu panjang. Maksimal 180 karakter.');
+        notify('Judul terlalu panjang. Maksimal 180 karakter.');
         return;
       }
       if (!title && !content) {
@@ -2560,7 +2626,8 @@
     // Phase 3.1 — ZIP backup, restore, import preview, and duplicate checks
     // ---------------------------------------------------------------------
     const KEEPFLOW_BACKUP_FORMAT = 'hadi-keepflow-backup';
-    const KEEPFLOW_BACKUP_SCHEMA = 1;
+    const KEEPFLOW_BACKUP_SCHEMA = 2;
+    const KEEPFLOW_BACKUP_SUPPORTED_SCHEMAS = [1, 2];
     const MAX_IMPORT_ZIP_BYTES = 25 * 1024 * 1024;
     const MAX_IMPORT_ENTRIES = 2000;
     const MAX_IMPORT_NOTE_BYTES = 500000;
@@ -2582,6 +2649,137 @@
       });
     }
 
+    // ---------------------------------------------------------------------
+    // Note file format v2 (YAML front matter + HTML body).
+    // KEEP IN SYNC with NoteFormat.gs: tests/format-compat.test.js checks that
+    // both implementations read each other's output.
+    // ---------------------------------------------------------------------
+    function yamlString(value) {
+      return JSON.stringify(String(value == null ? '' : value))
+        .replace(/\u2028/g, '\\u2028')
+        .replace(/\u2029/g, '\\u2029');
+    }
+
+    function serializeNoteFile(meta, body) {
+      const m = meta || {};
+      const tags = (Array.isArray(m.tags) ? m.tags : [])
+        .filter(tag => typeof tag === 'string')
+        .map(yamlString)
+        .join(', ');
+      return [
+        '---',
+        'keepflow: 2',
+        'title: ' + yamlString(m.title || ''),
+        'created: ' + yamlString(m.createdAt || ''),
+        'pinned: ' + (m.isPinned ? 'true' : 'false'),
+        'archived: ' + (m.isArchived ? 'true' : 'false'),
+        'tags: [' + tags + ']',
+        'content_type: html',
+        '---',
+        '',
+        String(body == null ? '' : body)
+      ].join('\n');
+    }
+
+    function parseYamlScalar(raw) {
+      const text = String(raw).trim();
+      if (text === '') return '';
+      try {
+        return JSON.parse(text);
+      } catch {
+        if (/^'.*'$/.test(text)) return text.slice(1, -1).replace(/''/g, "'");
+        if (text === 'true') return true;
+        if (text === 'false') return false;
+        return text;
+      }
+    }
+
+    function parseYamlTags(rawValue, followingLines) {
+      const value = String(rawValue).trim();
+      if (value.charAt(0) === '[') {
+        try {
+          const parsed = JSON.parse(value);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          const end = value.lastIndexOf(']');
+          return value.slice(1, end === -1 ? value.length : end)
+            .split(',').map(item => String(parseYamlScalar(item))).filter(Boolean);
+        }
+      }
+      if (value) return value.split(',').map(item => String(parseYamlScalar(item))).filter(Boolean);
+      const result = [];
+      for (const line of followingLines) {
+        const match = /^\s*-\s+(.*)$/.exec(line);
+        if (!match) break;
+        result.push(String(parseYamlScalar(match[1])));
+      }
+      return result;
+    }
+
+    function parseNoteText(text) {
+      const raw = String(text == null ? '' : text);
+      const src = raw.charCodeAt(0) === 0xFEFF ? raw.slice(1) : raw;
+
+      const v2 = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(src);
+      if (v2 && /^keepflow:/m.test(v2[1])) {
+        const lines = v2[1].split(/\r?\n/);
+        const meta = {};
+        lines.forEach((line, index) => {
+          const match = /^([A-Za-z_][\w-]*):[ \t]*(.*)$/.exec(line);
+          if (!match) return;
+          if (match[1] === 'tags') meta.tags = parseYamlTags(match[2], lines.slice(index + 1));
+          else meta[match[1]] = parseYamlScalar(match[2]);
+        });
+        return {
+          format: 'v2',
+          meta: {
+            title: typeof meta.title === 'string' ? meta.title : '',
+            createdAt: typeof meta.created === 'string' ? meta.created : '',
+            isPinned: meta.pinned === true || meta.pinned === 'true',
+            isArchived: meta.archived === true || meta.archived === 'true',
+            tags: (Array.isArray(meta.tags) ? meta.tags : []).filter(tag => typeof tag === 'string')
+          },
+          body: src.slice(v2[0].length).replace(/^\r?\n/, '')
+        };
+      }
+
+      if (src.indexOf('---JSON---') === 0) {
+        const parts = src.split('---JSON---');
+        if (parts.length >= 3) {
+          try {
+            const legacy = JSON.parse(parts[1].trim()) || {};
+            return {
+              format: 'v1',
+              meta: {
+                title: '',
+                createdAt: typeof legacy.createdAt === 'string' ? legacy.createdAt : '',
+                isPinned: normalizeBooleanFlag(legacy.isPinned),
+                isArchived: normalizeBooleanFlag(legacy.isArchived),
+                tags: (Array.isArray(legacy.tags) ? legacy.tags : []).filter(tag => typeof tag === 'string')
+              },
+              body: parts.slice(2).join('---JSON---').replace(/^\s+/, '')
+            };
+          } catch {
+            // Malformed metadata: keep the whole text instead of dropping the note.
+          }
+        }
+      }
+      return { format: 'plain', meta: { title: '', createdAt: '', isPinned: false, isArchived: false, tags: [] }, body: src };
+    }
+
+    // Files from other tools may be plain text/Markdown. The editor stores a
+    // small HTML subset, so wrap plain lines in paragraphs instead of letting
+    // the browser collapse every line break.
+    function looksLikeHtml(text) {
+      return /<\/?(?:p|div|br|hr|ul|ol|li|h[1-6]|strong|b|em|i|u|s|strike|a|blockquote|input|span)\b[^>]*>/i.test(text);
+    }
+
+    function plainTextToHtml(text) {
+      return String(text || '').replace(/\r\n?/g, '\n').split('\n')
+        .map(line => line.trim() ? '<p>' + escapeHTML(line) + '</p>' : '<p><br></p>')
+        .join('');
+    }
+
     function safeBackupSegment(value, fallback) {
       const cleaned = String(value || '')
         .replace(/[\/\\?%*:|"<>]/g, '-')
@@ -2593,14 +2791,13 @@
     }
 
     function makeBackupNoteFile(note) {
-      const metadata = {
+      return serializeNoteFile({
+        title: String(note.title || ''),
+        createdAt: note.createdAt || new Date().toISOString(),
         isPinned: normalizeBooleanFlag(note.isPinned),
         isArchived: normalizeBooleanFlag(note.isArchived),
-        tags: Array.isArray(note.tags) ? note.tags.filter(tag => typeof tag === 'string') : [],
-        createdAt: note.createdAt || new Date().toISOString()
-      };
-      return '---JSON---\n' + JSON.stringify(metadata, null, 2) +
-        '\n---JSON---\n\n' + String(note.content || '');
+        tags: Array.isArray(note.tags) ? note.tags : []
+      }, String(note.content || ''));
     }
 
     function downloadBlob(blob, filename) {
@@ -2764,12 +2961,12 @@
         setSyncStatus('Backup ZIP berhasil dibuat', 'fa-cloud-arrow-down', 'text-green-500');
         await new Promise(resolve => setTimeout(resolve, 900));
         hideDataProgress();
-        alert('Backup selesai. ' + cloudNotes.length + ' catatan dan ' + manifest.categories.length + ' kategori disimpan ke ZIP.');
+        notify('Backup selesai. ' + cloudNotes.length + ' catatan dan ' + manifest.categories.length + ' kategori disimpan ke ZIP.');
       } catch (error) {
         console.error('KeepFlow backup error:', error);
         finishDataProgress('Backup gagal', error.message, true);
         setSyncStatus('Backup gagal', 'fa-triangle-exclamation', 'text-red-500');
-        alert('Backup gagal: ' + error.message);
+        notify('Backup gagal: ' + error.message);
         hideDataProgress();
       } finally {
         button.disabled = false;
@@ -2778,38 +2975,34 @@
     }
 
     function parseBackupNoteFile(rawText, path, manifestNote) {
-      let content = String(rawText || '');
-      let metadata = {};
-      if (content.startsWith('---JSON---')) {
-        const parts = content.split('---JSON---');
-        if (parts.length >= 3) {
-          try {
-            metadata = JSON.parse(parts[1].trim()) || {};
-            content = parts.slice(2).join('---JSON---').replace(/^\s+/, '');
-          } catch (error) {
-            throw new Error('Metadata JSON tidak valid pada ' + path);
-          }
-        }
-      }
+      const parsed = parseNoteText(rawText);
+      const meta = parsed.meta;
       const segments = path.split('/').filter(Boolean);
       const categoryFromPath = segments.length > 1 ? segments[segments.length - 2] : '';
       const pathCategory = categoryFromPath.toLocaleLowerCase() === 'umum' ? '' : categoryFromPath;
       const category = normalizeNoteCategory(manifestNote && manifestNote.category != null ? manifestNote.category : pathCategory);
       const filename = segments[segments.length - 1] || '';
-      const title = String(manifestNote && manifestNote.title || filename.replace(/\.(md|txt)$/i, ''));
-      if (!title || title.length > 180 || category.length > 120 || content.length > MAX_IMPORT_NOTE_BYTES) {
+      const title = String(manifestNote && manifestNote.title || meta.title || filename.replace(/\.(md|txt)$/i, '')).trim();
+      if (!title || title.length > 180 || category.length > 120 || parsed.body.length > MAX_IMPORT_NOTE_BYTES) {
         throw new Error('Judul, kategori, atau isi catatan tidak memenuhi batas ukuran pada ' + path);
       }
-      const tags = Array.isArray(metadata.tags) ? metadata.tags.filter(tag => typeof tag === 'string' && tag.length <= 60).slice(0, 50) : [];
+      // Content from a ZIP is untrusted: reduce it to the editor's HTML subset
+      // before it can reach Drive or be rendered.
+      const content = looksLikeHtml(parsed.body) ? sanitizeEditorHTML(parsed.body) : plainTextToHtml(parsed.body);
+      if (content.length > MAX_IMPORT_NOTE_BYTES) {
+        throw new Error('Isi catatan melebihi batas ukuran setelah dibersihkan pada ' + path);
+      }
+      const tags = meta.tags.filter(tag => tag.length <= 60).slice(0, 50);
+      const created = meta.createdAt && !isNaN(Date.parse(meta.createdAt)) ? meta.createdAt : new Date().toISOString();
       return {
         id: 'import_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10),
         title,
         content,
         category: category,
-        isPinned: normalizeBooleanFlag(metadata.isPinned),
-        isArchived: normalizeBooleanFlag(metadata.isArchived),
+        isPinned: meta.isPinned,
+        isArchived: meta.isArchived,
         tags,
-        createdAt: metadata.createdAt || new Date().toISOString()
+        createdAt: created
       };
     }
 
@@ -2846,7 +3039,7 @@
       if (zip.file('manifest.json')) {
         try {
           manifest = JSON.parse(await zip.file('manifest.json').async('string'));
-          if (manifest.format !== KEEPFLOW_BACKUP_FORMAT || manifest.schemaVersion !== KEEPFLOW_BACKUP_SCHEMA) {
+          if (manifest.format !== KEEPFLOW_BACKUP_FORMAT || !KEEPFLOW_BACKUP_SUPPORTED_SCHEMAS.includes(manifest.schemaVersion)) {
             throw new Error('Versi format backup tidak didukung.');
           }
         } catch (error) {
@@ -3025,7 +3218,7 @@
         setSyncStatus('Restore selesai', 'fa-cloud-arrow-up', 'text-green-500');
         await new Promise(resolve => setTimeout(resolve, 900));
         hideDataProgress();
-        alert(
+        notify(
           'Restore selesai.\n' +
           'Catatan ditambahkan: ' + saved + '\n' +
           'Duplikat dilewati: ' + preview.exactDuplicates + '\n' +
@@ -3038,7 +3231,7 @@
         console.error('KeepFlow restore error:', error);
         finishDataProgress('Restore gagal / terhenti', error.message, true);
         setSyncStatus('Restore berhenti - periksa data cloud', 'fa-triangle-exclamation', 'text-red-500');
-        alert('Restore tidak selesai: ' + error.message + '\n\nCatatan yang sudah berhasil disimpan tetap berada di Google Drive. Jalankan restore lagi untuk melanjutkan; duplikat akan dilewati.');
+        notify('Restore tidak selesai: ' + error.message + '\n\nCatatan yang sudah berhasil disimpan tetap berada di Google Drive. Jalankan restore lagi untuk melanjutkan; duplikat akan dilewati.');
         hideDataProgress();
         // Refresh cloud state after a partial restore so the UI reflects acknowledged writes.
         try { loadInitialData(); } catch (refreshError) { console.warn(refreshError); }
@@ -3120,7 +3313,7 @@
 
     document.getElementById('bulk-move-category').addEventListener('click', () => {
       const selectedTarget = document.getElementById('bulk-category-select').value;
-      if (!selectedTarget) { alert('Pilih kategori tujuan terlebih dahulu.'); return; }
+      if (!selectedTarget) { notify('Pilih kategori tujuan terlebih dahulu.'); return; }
       const category = selectedTarget === '__inbox__' ? '' : selectedTarget;
       const count = applyBulkNoteUpdate(note => ({ ...note, category }));
       if (count) setSyncStatus(count + ' catatan dipindahkan ke ' + (category || 'Inbox'), category ? 'fa-folder' : 'fa-inbox', 'text-green-500');
@@ -3346,7 +3539,7 @@
         activeNoteId = null;
         editorBaseline = null;
       } else {
-        alert('Tidak ada catatan yang sedang aktif untuk dihapus.');
+        notify('Tidak ada catatan yang sedang aktif untuk dihapus.');
       }
     });
 

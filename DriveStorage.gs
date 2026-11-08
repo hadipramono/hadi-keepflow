@@ -86,41 +86,28 @@ function assertFileBelongsToStorage(file, storage) {
 }
 
 
+/** Return the value when it is a parseable date string, otherwise ''. */
+function validIsoDate_(value) {
+  return typeof value === 'string' && value && !isNaN(Date.parse(value)) ? value : '';
+}
+
 /**
- * Idempotency receipts make a retry safe when Apps Script completed a write
- * but the browser never received its success callback.
+ * Read one note file. Understands format v2 (YAML front matter), legacy v1
+ * (---JSON--- block) and plain files without metadata; see NoteFormat.gs.
  */
-
 function parseNoteFile(file, categoryName) {
-  const fileName = file.getName();
-  const content = file.getBlob().getDataAsString('UTF-8');
-  let body = content;
-  let meta = {};
-
-  if (content.startsWith('---JSON---')) {
-    const parts = content.split('---JSON---');
-    if (parts.length >= 3) {
-      try {
-        meta = JSON.parse(parts[1].trim()) || {};
-        body = parts.slice(2).join('---JSON---').replace(/^\s+/, '');
-      } catch (e) {
-        // Keep the original content visible if metadata is malformed.
-        body = content;
-        meta = {};
-      }
-    }
-  }
-
+  const parsed = parseNoteText(file.getBlob().getDataAsString('UTF-8'));
+  const meta = parsed.meta;
   const cloudVersion = file.getLastUpdated().toISOString();
   return {
     id: file.getId(),
-    title: fileName.replace(/\.(md|txt)$/i, ''),
-    content: body,
+    title: resolveNoteTitle(file.getName(), meta.title),
+    content: parsed.body,
     category: categoryName || '',
-    isPinned: toBoolean(meta.isPinned),
-    isArchived: toBoolean(meta.isArchived),
-    tags: Array.isArray(meta.tags) ? meta.tags.filter(t => typeof t === 'string') : [],
-    createdAt: meta.createdAt || file.getDateCreated().toISOString(),
+    isPinned: meta.isPinned,
+    isArchived: meta.isArchived,
+    tags: meta.tags,
+    createdAt: validIsoDate_(meta.createdAt) || file.getDateCreated().toISOString(),
     updatedAt: cloudVersion,
     // Immutable cloud baseline used for optimistic concurrency checks.
     baseUpdatedAt: cloudVersion

@@ -306,6 +306,37 @@
       #app > header > div:last-child { gap: 0; }
       #app > header > div:last-child > button { min-width: 44px; padding-left: .4rem; padding-right: .4rem; }
     }
+    /* Accessibility: Tailwind's text-gray-400 (#9ca3af) is only 2.5:1 on white.
+       Darken it in the light theme to reach WCAG AA (4.5:1). :not(:hover) keeps
+       hover colours (for example hover:text-red-500) working, and the extra
+       specificity makes this win regardless of stylesheet order. */
+    :where(html:not(.dark)) .text-gray-400:not(:hover) { color: #5b6472; }
+
+    /* Non-blocking notifications (replace window.alert). */
+    .kf-toast-region {
+      position: fixed; z-index: 10000; left: 50%; transform: translateX(-50%);
+      top: max(.75rem, env(safe-area-inset-top, 0px));
+      display: flex; flex-direction: column; gap: .5rem;
+      width: min(92vw, 28rem); pointer-events: none;
+    }
+    .kf-toast {
+      pointer-events: auto; display: flex; align-items: flex-start; gap: .5rem;
+      padding: .7rem .75rem .7rem 1rem; border-radius: .9rem; font-size: .875rem; line-height: 1.35;
+      background: #111827; color: #f9fafb; border-left: 4px solid #60a5fa;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, .25);
+    }
+    .kf-toast-success { border-left-color: #34d399; }
+    .kf-toast-warn { border-left-color: #fbbf24; }
+    .kf-toast-text { margin: 0; flex: 1; white-space: pre-line; overflow-wrap: anywhere; }
+    .kf-toast-close {
+      flex: none; min-width: 2rem; min-height: 2rem; margin: -.25rem -.25rem 0 0; border: 0; border-radius: .5rem;
+      background: transparent; color: inherit; font-size: 1.25rem; line-height: 1; cursor: pointer;
+    }
+    .kf-toast-close:hover { background: rgba(255, 255, 255, .12); }
+    .kf-toast-close:focus-visible { outline: 2px solid #93c5fd; outline-offset: 1px; }
+    .dark .kf-toast { background: #f3f4f6; color: #111827; }
+    .dark .kf-toast-close:hover { background: rgba(0, 0, 0, .1); }
+
     @media (prefers-reduced-motion: reduce) {
       #sidebar, .sidebar-backdrop { transition-duration: 0.01ms !important; }
     }

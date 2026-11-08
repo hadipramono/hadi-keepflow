@@ -23,7 +23,7 @@ function getOperationReceipt(operationId) {
   try {
     const receipt = JSON.parse(raw);
     // Receipts are intentionally short-lived; old keys are ignored.
-    if (!receipt || Date.now() - Number(receipt.completedAt || 0) > 7 * 24 * 60 * 60 * 1000) {
+    if (!receipt || Date.now() - Number(receipt.completedAt || 0) > RECEIPT_TTL_MS) {
       PropertiesService.getScriptProperties().deleteProperty(key);
       return null;
     }
@@ -34,15 +34,21 @@ function getOperationReceipt(operationId) {
   }
 }
 
-function storeOperationReceipt(operationId, receipt) {
-  const key = operationReceiptKey(operationId);
-  if (!key) return;
-  const properties = PropertiesService.getScriptProperties();
+var RECEIPT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+var RECEIPT_PRUNE_INTERVAL_MS = 60 * 60 * 1000;
+var RECEIPT_PRUNE_MARKER = 'keepflow_receipt_pruned_at';
+
+/**
+ * Delete expired receipts. Scanning every script property is O(n), so it runs
+ * at most once per RECEIPT_PRUNE_INTERVAL_MS unless forced (quota pressure).
+ */
+function pruneOperationReceipts_(properties, keepKey, force) {
+  const now = Date.now();
+  if (!force && now - Number(properties.getProperty(RECEIPT_PRUNE_MARKER) || 0) < RECEIPT_PRUNE_INTERVAL_MS) return;
   const all = properties.getProperties();
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  // Keep the script property store bounded by pruning expired KeepFlow receipts.
+  const cutoff = now - RECEIPT_TTL_MS;
   Object.keys(all).forEach(propertyKey => {
-    if (propertyKey.indexOf('keepflow_op_') !== 0 || propertyKey === key) return;
+    if (propertyKey.indexOf('keepflow_op_') !== 0 || propertyKey === keepKey) return;
     try {
       const existing = JSON.parse(all[propertyKey]);
       if (!existing || Number(existing.completedAt || 0) < cutoff) {
@@ -52,10 +58,31 @@ function storeOperationReceipt(operationId, receipt) {
       properties.deleteProperty(propertyKey);
     }
   });
-  properties.setProperty(key, JSON.stringify({
-    ...receipt,
-    completedAt: Date.now()
-  }));
+  properties.setProperty(RECEIPT_PRUNE_MARKER, String(now));
+}
+
+/**
+ * Best effort. The Drive write has already succeeded when this runs, so a
+ * failure here (for example the 500 KB script-property quota during a large
+ * ZIP restore) must never turn a successful save into an error: the client
+ * would retry and create a duplicate note.
+ */
+function storeOperationReceipt(operationId, receipt) {
+  const key = operationReceiptKey(operationId);
+  if (!key) return;
+  const properties = PropertiesService.getScriptProperties();
+  const value = JSON.stringify({ ...receipt, completedAt: Date.now() });
+  try {
+    pruneOperationReceipts_(properties, key, false);
+    properties.setProperty(key, value);
+  } catch (firstError) {
+    try {
+      pruneOperationReceipts_(properties, key, true);
+      properties.setProperty(key, value);
+    } catch (secondError) {
+      console.warn('KeepFlow: receipt operasi tidak tersimpan: ' + String(secondError && secondError.message || secondError));
+    }
+  }
 }
 
 function replayOperationReceipt(receipt, expectedType, storage) {

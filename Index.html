@@ -41,7 +41,9 @@
 <body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-100 font-sans antialiased min-h-screen transition-colors duration-200">
 
   <!-- Global Loading Overlay -->
-  <div id="global-loader" class="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white transition-opacity duration-300">
+  <div id="toast-region" class="kf-toast-region" aria-live="polite" aria-atomic="false"></div>
+
+  <div id="global-loader" role="status" aria-live="polite" class="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white transition-opacity duration-300">
     <div class="bg-white dark:bg-gray-800 px-6 py-4 rounded-2xl shadow-xl flex items-center space-x-4 border border-gray-200 dark:border-gray-700">
       <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl"></i>
       <div>
@@ -70,7 +72,7 @@
       <div class="flex-1 min-w-0 max-w-2xl mx-1 sm:mx-4 flex items-center gap-2">
         <div class="relative flex-1">
           <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"></i>
-          <input type="search" id="search-input" autocomplete="off" style="appearance:none" aria-controls="recent-search-panel" aria-expanded="false" placeholder="Cari judul, isi, kategori, atau tag... (Ctrl+K)" class="w-full pl-10 pr-10 py-2 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 text-sm transition">
+          <input type="search" id="search-input" autocomplete="off" style="appearance:none" aria-controls="recent-search-panel" placeholder="Cari judul, isi, kategori, atau tag... (Ctrl+K)" class="w-full pl-10 pr-10 py-2 bg-gray-100 dark:bg-gray-700 border-0 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white dark:focus:bg-gray-800 text-sm transition">
           <button id="clear-search-btn" type="button" aria-label="Hapus pencarian" title="Hapus pencarian" class="hidden absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
             <i class="fa-solid fa-circle-xmark"></i>
           </button>
@@ -157,7 +159,7 @@
             <i class="fa-solid fa-chart-pie w-5 text-center"></i>
             <span>Dashboard</span>
           </button>
-          <button data-filter="inbox" class="nav-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 font-medium" aria-label="Inbox">
+          <button data-filter="inbox" class="nav-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 font-medium">
             <i class="fa-solid fa-inbox w-5 text-center"></i>
             <span>Inbox</span>
             <span id="inbox-count" class="ml-auto min-w-5 text-center text-[10px] px-1.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">0</span>
