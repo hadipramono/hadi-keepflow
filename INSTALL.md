@@ -1,10 +1,10 @@
 # Instalasi dan deployment
 
 ## Prasyarat
-- Google account dan akses Google Apps Script.
+- Akun Google dan akses ke Google Apps Script.
 - Google Drive.
 - Browser modern dengan JavaScript aktif.
-- Internet untuk dependency CDN yang digunakan UI.
+- Koneksi internet untuk dependency CDN yang dipakai UI: Tailwind CSS (`cdn.tailwindcss.com`), Font Awesome 6.4.0 (`cdnjs.cloudflare.com`), dan JSZip 3.10.1 (`cdn.jsdelivr.net`).
 
 ## Membuat project
 1. Buka https://script.google.com/ lalu buat project baru.
@@ -16,8 +16,22 @@
 ## Deploy
 1. Pilih **Deploy → New deployment → Web app**.
 2. Untuk instance pribadi, pilih **Execute as: Me** dan **Who has access: Only myself**.
-3. Deploy, berikan otorisasi Google Drive, lalu buka URL aplikasi.
-4. Buat catatan uji dan pastikan file muncul di folder KeepFlow pada Google Drive.
+3. Deploy, berikan otorisasi Google Drive, lalu buka URL aplikasi (`.../exec`).
+4. Buat catatan uji dan pastikan file muncul di folder `My Drive/apps/KeepFlow/storage/`.
+
+## Memperbarui deployment
+Perubahan source **tidak otomatis tampil** pada URL `/exec`. Setelah menyalin source baru:
+
+1. Pilih **Deploy → Manage deployments**.
+2. Klik ikon pensil (Edit) pada deployment yang ada.
+3. Pada **Version**, pilih **New version**, lalu **Deploy**.
+4. Muat ulang aplikasi di browser (tutup tab lama dan buka dari tab baru).
+
+Langkah ini wajib untuk perubahan di `Code.gs`, termasuk meta viewport (`interactive-widget=resizes-content`) yang membuat toolbar editor mobile tetap berada di atas keyboard virtual. Meta tersebut hanya berlaku bila halaman dibuka lewat URL `/exec` deployment terbaru.
+
+## Catatan keyboard virtual
+- Android (Chrome 108+, Samsung Internet): toolbar editor mengikuti keyboard melalui `interactive-widget=resizes-content`.
+- iOS Safari tidak mendukung `interactive-widget`; posisi toolbar bergantung pada `visualViewport`. Verifikasi pada perangkat nyata dicatat di [`TESTING.md`](TESTING.md).
 
 ## Penting
 Jangan membuka akses publik untuk deployment yang berjalan sebagai akun pemilik. Aplikasi ini belum memiliki autentikasi dan otorisasi multi-user sendiri. Lakukan pengujian pada project dan data Drive terpisah sebelum menggunakan data utama.

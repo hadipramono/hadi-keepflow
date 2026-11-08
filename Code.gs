@@ -1,5 +1,5 @@
 /**
- * Hadi KeepFlow v1.3.7 — Phase 3.7.4
+ * Hadi KeepFlow v1.3.8
  * Google Apps Script web entry point and shared utilities.
  * Backend modules: DriveStorage.gs, SyncOperations.gs, NotesApi.gs.
  * Storage: My Drive/apps/KeepFlow/storage/<category>/<note>.md
@@ -9,12 +9,21 @@
  * state is accepted only to recover an interrupted move into Temporary Inbox.
  */
 
-function doGet() {
+function doGet(e) {
   // Keep Apps Script's default X-Frame-Options protection.
   // Do not enable ALLOWALL unless embedding is an explicit, reviewed requirement.
-  return HtmlService.createTemplateFromFile('Index').evaluate()
+  const template = HtmlService.createTemplateFromFile('Index');
+  // IMPORTANT (mobile keyboard): Apps Script renders Index.html inside a sandboxed
+  // iframe, and the browser only honours the viewport meta of the OUTER page,
+  // i.e. the one added here (the <meta name="viewport"> inside Index.html is
+  // ignored). Without "interactive-widget=resizes-content", Chrome/Android
+  // (108+) lets the virtual keyboard overlay the page and the iframe never
+  // learns about it, so a bottom-anchored toolbar ends up hidden behind the
+  // keyboard. With it, the layout viewport (and the iframe) shrink when the
+  // keyboard opens, so the editor dock stays directly above the keyboard.
+  return template.evaluate()
     .setTitle('Hadi KeepFlow')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, interactive-widget=resizes-content');
 }
 
 function safeName(value, fallback) {

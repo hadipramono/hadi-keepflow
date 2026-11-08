@@ -141,8 +141,8 @@
       #modal-timestamps { font-size: .65rem; gap: .25rem .75rem; margin-bottom: .25rem; }
       #editor-draft-status { font-size: .68rem; line-height: 1.25; margin-bottom: .5rem; }
       #editor-content-editable {
-        flex: 0 0 auto;
-        min-height: max(12rem, 28dvh);
+        flex: 1 0 auto;
+        min-height: 10rem;
         padding-bottom: 1rem;
         font-size: 1rem;
         scroll-margin-block: 1rem;
@@ -151,11 +151,12 @@
       #modal-tags-input { font-size: 16px; min-height: 40px; }
       #editor-modal .editor-modal-body > .mt-4 { margin-top: .65rem; padding-top: .55rem; }
       #editor-bottom-dock {
-        /* The modal itself tracks visualViewport; dock to its visible bottom edge. */
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: 0;
+        /* The dock is a normal flex child at the bottom of the editor modal.
+           The modal is sized to the *visible* viewport (see
+           syncEditorVisualViewport + interactive-widget=resizes-content), so the
+           dock always sits directly above the virtual keyboard, and the scrolling
+           body simply ends above it - no overlap, no padding tricks. */
+        position: relative;
         order: 1;
         display: none;
         flex: 0 0 auto;
@@ -164,23 +165,23 @@
         padding: .35rem .5rem max(.35rem, env(safe-area-inset-bottom, 0px));
         background: #f9fafb;
         border-top: 1px solid rgba(156, 163, 175, .25);
-        z-index: 60;
-        transform: translateZ(0);
+        box-shadow: 0 -4px 12px rgba(0, 0, 0, .04);
+        z-index: 80;
         touch-action: pan-x;
+        max-height: 60%;
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
       .dark #editor-bottom-dock { background: #111827; border-top-color: rgba(75, 85, 99, .45); }
       #editor-modal.editor-content-active #editor-bottom-dock { display: block; visibility: visible; }
       #modal-save-btn { position: relative; z-index: 65; touch-action: manipulation; }
       #modal-mobile-actions-toggle { touch-action: manipulation; }
-      #editor-modal.editor-content-active .editor-modal-body {
-        padding-bottom: calc(var(--keepflow-dock-height, 5rem) + 1rem);
-        scroll-padding-bottom: calc(var(--keepflow-dock-height, 5rem) + 1rem);
-      }
+      #editor-modal.editor-content-active .editor-modal-body { scroll-padding-bottom: 1rem; }
       #editor-composer-toolbar {
         display: flex;
         align-items: center;
-        justify-content: flex-start;
-        gap: .55rem;
+        justify-content: stretch;
+        gap: .45rem;
         min-width: 0;
         overflow-x: auto;
         overflow-y: hidden;
@@ -190,9 +191,26 @@
         scrollbar-width: none;
       }
       #editor-composer-toolbar::-webkit-scrollbar { display: none; }
+      /* Tiga aksi (Format, Template, Kategori) berbagi lebar baris secara rata, tanpa scroll horizontal. */
+      #editor-composer-toolbar .editor-action-btn { flex: 1 1 0; min-width: 0; padding-left: .5rem; padding-right: .5rem; }
       #editor-format-region { display: none; width: 100%; min-width: 0; }
-      #editor-modal.editor-formatting-mode #editor-composer-toolbar { display: none; }
+      #editor-context-panel { display: none; width: 100%; min-width: 0; }
+      #editor-context-panel[hidden] { display: none !important; }
+      #editor-context-panel:not([hidden]) { display: block; }
+      #editor-modal.editor-formatting-mode #editor-composer-toolbar,
+      #editor-modal.editor-context-mode #editor-composer-toolbar { display: none; }
       #editor-modal.editor-formatting-mode #editor-format-region { display: block; }
+      .editor-context-panel-heading { display: flex; align-items: center; gap: .65rem; padding: 0 .25rem .45rem; color: #6b7280; font-size: .78rem; font-weight: 600; }
+      .dark .editor-context-panel-heading { color: #d1d5db; }
+      #mobile-context-back-btn { min-width: 40px; min-height: 40px; width: 40px; height: 40px; padding: .5rem; }
+      #editor-context-controls .editor-metadata-row { display: block; margin: 0; padding: 0 .2rem .2rem; }
+      #editor-context-controls #editor-category-control,
+      #editor-context-controls #editor-template-control { display: none; width: 100%; }
+      #editor-modal[data-panel-mode="category"] #editor-category-control { display: block; }
+      #editor-modal[data-panel-mode="template"] #editor-template-control { display: flex; flex-wrap: wrap; }
+      #editor-context-controls #modal-category-select,
+      #editor-context-controls #editor-template-select { width: 100%; min-height: 46px; font-size: 16px; }
+      #editor-context-controls #manage-templates-btn { min-height: 44px; }
       .editor-format-heading {
         display: flex;
         align-items: center;
@@ -226,6 +244,7 @@
       #editor-modal .editor-modal-body { order: 2; padding: 2rem; }
       #editor-bottom-dock { order: 1; display: block; }
       #editor-composer-toolbar { display: none; }
+      #editor-context-panel { display: none !important; }
       #editor-format-region { display: block; }
       #editor-toolbar { display: flex !important; flex-wrap: nowrap; overflow-x: visible; border-top: 0; border-bottom: 1px solid rgba(156, 163, 175, .25); }
       #editor-content-editable { flex: 1 0 auto; }
@@ -237,8 +256,6 @@
     }
 
     /* Keep metrics and tags in the scrollable content body. */
-    #editor-metrics,
-    #modal-tags-input { flex-shrink: 0; }
     #editor-metrics,
     #modal-tags-input { flex-shrink: 0; }
     .editor-content { line-height: 1.75; overflow-wrap: anywhere; }

@@ -1,31 +1,17 @@
-# OS / editor
+# Data pribadi dan backup (lihat SECURITY.md)
+*.zip
+backups/
+
+# Tooling Apps Script / Node
+.clasp.json
+.clasprc.json
+node_modules/
+
+# OS dan editor
 .DS_Store
 Thumbs.db
-.vscode/
 .idea/
-*.swp
-*.swo
-
-# Local environment and secrets
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-credentials.json
-token.json
-client_secret*.json
-
-# User data and exports
-backup/
-backups/
-*.zip
-*.jsonl
-*.sqlite
-*.db
-
-# Apps Script local tooling
-.clasp.json
-.claspignore
+.vscode/
+*.log
 
 _arsip

@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Gradasi Background Modern -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2563eb" />
+      <stop offset="100%" stop-color="#1e1b4b" />
+    </linearGradient>
+    <!-- Gradasi Huruf H & Flow -->
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#60a5fa" />
+      <stop offset="100%" stop-color="#38bdf8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background Kotak Rounded (Standar Android App Icon) -->
+  <rect width="512" height="512" rx="115" fill="url(#bgGrad)" />
+
+  <!-- Efek Siluet Lembar Catatan di Belakang -->
+  <path d="M160 130 H352 A32 32 0 0 1 384 162 V382 A32 32 0 0 1 352 414 H160 Z" fill="#ffffff" fill-opacity="0.08" />
+
+  <!-- Huruf H yang Disatukan dengan Aliran Garis (Flow) -->
+  <path d="M140 156 V356 M372 156 V356 M140 256 H372" stroke="url(#accentGrad)" stroke-width="48" stroke-linecap="round" />
+
+  <!-- Titik Aksen Data / Sync Flow -->
+  <circle cx="372" cy="156" r="16" fill="#38bdf8" />
+  <circle cx="140" cy="356" r="16" fill="#60a5fa" />
+</svg>

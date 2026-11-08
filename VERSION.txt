@@ -1,3 +1,0 @@
-Application version: v1.3.7
-Stabilization: R1 Editor & Category + R2 Mobile UX & Accessibility
-Release status: candidate; browser, Apps Script, Google Drive, and real-device validation remain pending.
