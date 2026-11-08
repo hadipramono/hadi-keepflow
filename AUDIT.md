@@ -10,7 +10,7 @@ Tanggal: 2026-11-08. Cakupan: keamanan, kode, cara dan format penyimpanan, keand
 - ESLint pada seluruh JavaScript: tidak ada variabel tak terdefinisi, duplikat, atau kode tak terjangkau; hanya 10 parameter `catch` yang tidak dipakai.
 - axe-core (WCAG 2.0/2.1 A/AA + best practice) pada daftar catatan dan editor, desktop dan mobile, tema terang dan gelap.
 - Proof-of-concept untuk temuan keamanan.
-- Tes otomatis baru (`tests/`, 35 tes) dan uji mutasi untuk memastikan tes benar-benar menangkap kerusakan.
+- Tes otomatis baru (`tests/`, 59 tes) dan uji mutasi untuk memastikan tes benar-benar menangkap kerusakan.
 
 ## Temuan dan status
 
@@ -29,13 +29,14 @@ Tanggal: 2026-11-08. Cakupan: keamanan, kode, cara dan format penyimpanan, keand
 | U2 | Aksesibilitas | axe: 5 jenis pelanggaran (kontras teks abu-abu 2,5:1, `aria-expanded` tak valid pada kolom cari, label tombol Inbox tak cocok teksnya, checkbox checklist tanpa nama, loader tanpa role). | Sedang | **Diperbaiki** (0 pelanggaran, terang dan gelap) |
 | U3 | UX | 27 `alert()` yang memblokir halaman (bermasalah di iframe Apps Script). | Rendah | **Diganti** toast non-blokir (`role` sesuai tingkat) |
 | U4 | UX | Dock mobile tertutup keyboard; lima tombol tidak muat. | Tinggi | **Diperbaiki** (lihat CHANGELOG) |
+| P1 | Performa | `getNotes` mengunduh isi **setiap** file Drive pada setiap pemuatan (satu panggilan per file), sambil memegang `ScriptLock` sehingga penyimpanan ikut tertahan. | Tinggi (pada banyak catatan) | **Diperbaiki** dengan indeks catatan (lihat bagian Performa). Belum diukur di Drive nyata. |
 | E1 | Rekayasa | Tidak ada tes, manifest, atau CI. | Sedang | **Ditambah** (`tests/`, `appsscript.json`, GitHub Actions) |
 
 ## Temuan terbuka (belum dikerjakan)
 
 | # | Temuan | Usulan |
 |---|---|---|
-| O1 | `getNotes` membaca isi **setiap** file Drive pada setiap pemuatan (O(N) panggilan). Pada ratusan catatan ini akan terasa lambat. | Ukur dulu di Apps Script. Opsi: cache per catatan di `CacheService` (kunci = ID + `lastUpdated`), atau indeks metadata di satu file. Tidak saya implementasikan karena tidak bisa diukur di sini. |
+| O1 | Respons `getNotes` masih berisi seluruh isi semua catatan pada setiap pemuatan (biaya transfer, bukan biaya Drive). | Setelah P1 diukur di Drive nyata: protokol delta (klien mengirim ID+versi yang dimilikinya, server hanya mengirim yang berubah). |
 | O2 | Cache lokal memakai `localStorage` (±5 MB, sinkron, memblokir UI) berisi seluruh isi catatan. | Pindah ke IndexedDB. |
 | O3 | `document.execCommand` sudah deprecated. | Ganti dengan Selection/Range API atau pustaka editor. |
 | O4 | 10 `confirm()` dan 5 `prompt()` masih native. | Dialog di dalam aplikasi (butuh refaktor alur async). |
@@ -45,6 +46,23 @@ Tanggal: 2026-11-08. Cakupan: keamanan, kode, cara dan format penyimpanan, keand
 | O8 | Tidak ada backup otomatis (hanya ZIP manual). | Time-driven trigger yang menulis ZIP ke folder Drive terpisah. |
 | O9 | Tes browser (Playwright) belum masuk repo/CI; hanya tes Node. | Tambahkan setelah ada keputusan soal dependensi dev. |
 | O10 | Restore melewati catatan berjudul sama tetapi isi berbeda. | Impor sebagai salinan ("(impor)") bila pengguna setuju. |
+
+## Performa: indeks catatan (P1)
+
+Biaya mahal pada pembacaan adalah *mengunduh isi file*, bukan mendaftar file dan membaca metadatanya. Solusinya satu file `storage/.keepflow-index.json` yang menyimpan hasil parse tiap catatan beserta ID, waktu ubah, dan nama file. Saat memuat, catatan yang ID, versi, dan namanya masih sama diambil dari indeks; yang lain dibaca dari Drive seperti biasa.
+
+Jaminan yang diuji otomatis (12 mutasi sengaja dirusak, semuanya tertangkap):
+
+- **Indeks hanya cache.** Indeks hilang, rusak, berformat asing, entrinya cacat, terlalu besar, atau gagal ditulis: pembacaan tetap benar, hanya lebih lambat.
+- **Tidak pernah menyajikan data basi.** Setiap entri divalidasi terhadap file-nya pada tiap pembacaan (versi dan nama). Kategori tidak disimpan; selalu diambil dari folder.
+- **Penulisan tidak memakai indeks.** Deteksi konflik versi selalu dari file Drive.
+- **Backup membaca langsung dari file** dan tidak memakai atau mengubah indeks.
+- **Tahan batas 6 menit.** Pembacaan dingin yang sangat besar menulis checkpoint tiap 100 unduhan, sehingga percobaan berikutnya melanjutkan.
+- **Tidak ditulis ulang bila tidak ada perubahan**, dan file indeks tidak pernah tampil sebagai catatan.
+
+Hasil pada tiruan Drive (jumlah unduhan isi file, bukan waktu nyata): 300 catatan, muat pertama 300 unduhan; muat kedua **0 unduhan**; mengedit satu catatan lalu memuat: **1 unduhan**.
+
+Yang **belum** diketahui: penghematan waktu nyata di Apps Script. Jalankan `benchmarkNotesRead` dari editor Apps Script untuk mengukurnya pada data Anda.
 
 ## Hal yang sudah baik (dipertahankan)
 

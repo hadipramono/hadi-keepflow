@@ -36,6 +36,16 @@ Uji pada URL `/exec`, orientasi portrait dan landscape.
 - [ ] File lama berformat `---JSON---` terbuka dengan isi, tag, pin, dan tanggal yang benar, dan berubah ke v2 setelah disimpan.
 - [ ] Restore ZIP berisi konten berbahaya (`<img onerror>`, `<script>`) tidak menjalankan skrip dan konten dibersihkan.
 
+## 2c. Indeks catatan dan kecepatan (Apps Script nyata)
+- [ ] Jalankan `benchmarkNotesRead` dari editor Apps Script; catat `fullReadMs` versus `indexedReadMs` dan `indexedReadFileReads` (harus 0).
+- [ ] Setelah memuat aplikasi sekali, file `.keepflow-index.json` ada di `My Drive/apps/KeepFlow/storage/` dan **tidak** muncul sebagai catatan.
+- [ ] Muat ulang aplikasi: log eksekusi (`KeepFlow getNotes: ...`) menunjukkan `reads` mendekati 0.
+- [ ] Ubah satu catatan di aplikasi, lalu muat ulang: hanya `reads: 1`.
+- [ ] Edit isi satu file `.md` langsung di Drive lalu muat ulang: perubahan itu tampil (tidak basi).
+- [ ] Hapus `.keepflow-index.json` di Drive lalu muat ulang: catatan tetap lengkap dan indeks dibuat lagi.
+- [ ] Backup ZIP berisi semua catatan dan tidak mengubah file indeks.
+- [ ] (Vault besar, ratusan catatan) Muat pertama setelah indeks dihapus selesai tanpa error batas waktu; bila terputus, muat ulang melanjutkan lebih cepat.
+
 ## 3. Catatan dan kategori
 - [ ] Buat, ubah, pin, arsip, dan hapus catatan; file di Drive ikut berubah.
 - [ ] Buat, ubah nama, dan hapus kategori kosong.

@@ -27,6 +27,7 @@ Aplikasi Personal Knowledge Management (PKM) ringan berbasis **Google Apps Scrip
 ├── Code.gs              Web app entry point dan shared utilities
 ├── NotesApi.gs          API catatan dan kategori
 ├── NoteFormat.gs        Format file catatan v2 (YAML front matter)
+├── NotesIndex.gs        Indeks cache catatan (mempercepat pemuatan)
 ├── DriveStorage.gs      Operasi Google Drive
 ├── SyncOperations.gs    Sinkronisasi dan idempotency receipts
 ├── Index.html           Struktur halaman dan komponen UI
@@ -67,6 +68,7 @@ content_type: html
 - **Isi catatan adalah HTML sederhana, bukan Markdown.** Penyimpanan Markdown murni ada di [`ROADMAP.md`](ROADMAP.md).
 - Judul asli disimpan di front matter; nama file hanya versi yang aman untuk Drive.
 - Format lama (`---JSON---`) dan file tanpa metadata tetap terbaca dan ditingkatkan saat disimpan lagi.
+- `storage/.keepflow-index.json` adalah indeks cache yang dibuat otomatis agar pemuatan cepat. Aman dihapus (dibangun ulang) dan tidak pernah tampil sebagai catatan.
 
 ## Arsitektur
 
@@ -86,7 +88,7 @@ Google Drive: My Drive/apps/KeepFlow/storage/<kategori>/<catatan>.md
 ## Instalasi singkat
 
 1. Buat project di [Google Apps Script](https://script.google.com/).
-2. Tambahkan lima file `.gs` dan tiga file HTML dengan nama yang sama seperti pada repository.
+2. Tambahkan enam file `.gs` dan tiga file HTML dengan nama yang sama seperti pada repository.
 3. Salin source, simpan, lalu deploy sebagai **Web app**.
 4. Untuk penggunaan pribadi, gunakan **Execute as: Me** dan **Who has access: Only myself**.
 5. Uji pada project dan folder Drive khusus testing sebelum memakai data utama.

@@ -114,12 +114,16 @@ function parseNoteFile(file, categoryName) {
   };
 }
 
-function collectFolderNotes(folder, category, result) {
+/**
+ * Append the notes of one folder to result. With ctx (see NotesIndex.gs) notes
+ * are read through the index; without it every file is read directly.
+ */
+function collectFolderNotes(folder, category, result, ctx) {
   const files = folder.getFiles();
   while (files.hasNext()) {
     const file = files.next();
     if (!/\.(md|txt)$/i.test(file.getName()) || file.isTrashed()) continue;
-    result.push(parseNoteFile(file, category));
+    result.push(ctx ? readNoteIndexed_(file, category, ctx) : parseNoteFile(file, category));
   }
 }
 

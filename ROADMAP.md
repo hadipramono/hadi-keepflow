@@ -14,6 +14,7 @@
 | Dialog accessibility | Implemented | Uji keyboard dan screen reader |
 | Penghapusan kategori kosong | Implemented | Uji integrasi Drive |
 | Format penyimpanan v2 (YAML front matter) | Implemented; lulus tes dengan tiruan Drive | Uji di Drive nyata, termasuk membuka file lama v1 |
+| Indeks catatan (pemuatan cepat) | Implemented; lulus tes dengan tiruan Drive | Ukur dengan `benchmarkNotesRead` di Apps Script; uji checkpoint pada data besar |
 | Keamanan single-user | Batasan diketahui | Review izin deployment |
 
 ## Prioritas berikutnya
@@ -27,7 +28,7 @@
 ## Temuan audit yang belum dikerjakan
 Lihat tabel lengkap di [`AUDIT.md`](AUDIT.md). Prioritas teratas:
 
-1. Ukur waktu `getNotes` di Apps Script pada data besar, lalu putuskan cache `CacheService` atau indeks metadata.
+1. Jalankan `benchmarkNotesRead` di Apps Script pada data nyata dan catat hasilnya. Bila transfer respons ternyata dominan, lanjutkan ke protokol delta (klien mengirim ID+versi, server hanya mengirim yang berubah).
 2. Pindahkan cache lokal dari `localStorage` ke IndexedDB.
 3. Konversi isi catatan ke Markdown murni (field `content_type` sudah disiapkan).
 4. Backup otomatis terjadwal ke folder Drive terpisah.

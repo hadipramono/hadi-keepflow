@@ -19,6 +19,9 @@ function createEnvironment(options = {}) {
   let idCounter = 0;
   const tick = () => new Date((clock += 1000));
   const nodes = new Map();
+  // Number of file-content downloads, the expensive Drive operation.
+  const counters = { noteReads: 0, indexReads: 0 };
+  const INDEX_NAME = '.keepflow-index.json';
 
   class Node {
     constructor(name, isFolder) {
@@ -36,15 +39,27 @@ function createEnvironment(options = {}) {
     getParents() { return iter(this.parents.filter(p => !p.trashed || true)); }
     getLastUpdated() { return this.updated; }
     getDateCreated() { return this.created; }
-    getBlob() { const c = this.content; return { getDataAsString: () => c }; }
-    setContent(c) { this.content = String(c); this.updated = tick(); return this; }
+    getBlob() {
+      const self = this;
+      return { getDataAsString: () => {
+        if (self.name !== INDEX_NAME && options.throwAfterNoteReads != null && counters.noteReads >= options.throwAfterNoteReads) {
+          throw new Error('simulasi: batas waktu eksekusi habis');
+        }
+        counters[self.name === INDEX_NAME ? 'indexReads' : 'noteReads']++;
+        return self.content;
+      } };
+    }
+    setContent(c) {
+      if (options.failIndexWrite && this.name === INDEX_NAME) throw new Error('simulasi: gagal menulis indeks');
+      this.content = String(c); this.updated = tick(); return this;
+    }
     // folder API
     getFolders() { return iter(this.children.filter(c => c.isFolder)); }
     getFiles() { return iter(this.children.filter(c => !c.isFolder)); }
     getFoldersByName(n) { return iter(this.children.filter(c => c.isFolder && !c.trashed && c.name === n)); }
     getFilesByName(n) { return iter(this.children.filter(c => !c.isFolder && !c.trashed && c.name === n)); }
     createFolder(n) { const f = new Node(n, true); f.parents.push(this); this.children.push(f); return f; }
-    createFile(n, content) { const f = new Node(n, false); f.content = String(content); f.parents.push(this); this.children.push(f); return f; }
+    createFile(n, content) { if (options.failIndexWrite && n === INDEX_NAME) throw new Error('simulasi: gagal menulis indeks'); const f = new Node(n, false); f.content = String(content); f.parents.push(this); this.children.push(f); return f; }
     addFile(file) { if (!this.children.includes(file)) { this.children.push(file); file.parents.push(this); } return this; }
     removeFile(file) { this.children = this.children.filter(c => c !== file); file.parents = file.parents.filter(p => p !== this); return this; }
   }
@@ -86,14 +101,14 @@ function createEnvironment(options = {}) {
   vm.createContext(context);
 
   const repo = path.join(__dirname, '..');
-  const files = ['Code.gs', 'DriveStorage.gs', 'SyncOperations.gs', 'NoteFormat.gs', 'NotesApi.gs'];
+  const files = ['Code.gs', 'DriveStorage.gs', 'SyncOperations.gs', 'NoteFormat.gs', 'NotesIndex.gs', 'NotesApi.gs'];
   // `var`/function declarations land on the context; const/let would not, so
   // expose the few top-level constants the tests read.
   const source = files.map(f => fs.readFileSync(path.join(repo, f), 'utf8')).join('\n;\n');
   vm.runInContext(source, context, { filename: 'backend.gs' });
 
   const storage = root.createFolder('apps').createFolder('KeepFlow').createFolder('storage');
-  return { api: context, root, storage, DriveApp, props, tick, propertyReads: () => propertyReads, Node };
+  return { api: context, root, storage, DriveApp, props, tick, counters, options, propertyReads: () => propertyReads, Node };
 }
 
 module.exports = { createEnvironment };

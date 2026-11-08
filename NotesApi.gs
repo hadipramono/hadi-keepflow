@@ -9,10 +9,21 @@
  * A partially completed Drive move can expose one file through two parents, so
  * results are de-duplicated by immutable Drive file ID (first one wins, which
  * prefers the storage root).
+ *
+ * options.useIndex (default true): read unchanged notes from the notes index
+ * instead of downloading each file (see NotesIndex.gs). Backups pass false.
+ * Returns { notes, categories, stats }.
  */
-function collectAllNotes_(storage) {
+function collectAllNotes_(storage, options) {
+  const useIndex = !options || options.useIndex !== false;
+  const started = Date.now();
+  const index = useIndex ? loadNotesIndex_(storage) : null;
+  const ctx = useIndex
+    ? { storage: storage, file: index.file, entries: index.entries, next: {}, stats: { files: 0, hits: 0, reads: 0 } }
+    : null;
+
   const result = [];
-  collectFolderNotes(storage, '', result);
+  collectFolderNotes(storage, '', result, ctx);
 
   const categories = new Set();
   const folders = storage.getFolders();
@@ -22,7 +33,7 @@ function collectAllNotes_(storage) {
     const folderName = folder.getName();
     const category = folderName.toLocaleLowerCase() === 'umum' ? '' : folderName;
     if (category) categories.add(category);
-    collectFolderNotes(folder, category, result);
+    collectFolderNotes(folder, category, result, ctx);
   }
 
   const unique = new Map();
@@ -30,9 +41,28 @@ function collectAllNotes_(storage) {
     const id = String(note.id);
     if (!unique.has(id)) unique.set(id, note);
   });
+
+  const stats = ctx ? ctx.stats : { files: result.length, hits: 0, reads: result.length };
+  stats.indexUsed = useIndex;
+  if (ctx) {
+    // Rewrite the index only when something changed (a file was read from
+    // Drive, or an indexed file no longer exists). Failures never affect the
+    // result: the index is only a cache.
+    const removed = Object.keys(index.entries).some(id => !(id in ctx.next));
+    if (stats.reads > 0 || removed) {
+      try {
+        stats.indexChars = saveNotesIndex_(storage, ctx.file, ctx.next).chars;
+      } catch (e) {
+        stats.indexError = String(e && e.message || e).slice(0, 200);
+      }
+    }
+  }
+  stats.ms = Date.now() - started;
+
   return {
     notes: Array.from(unique.values()).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt)),
-    categories: Array.from(categories).sort((a, b) => a.localeCompare(b, 'id'))
+    categories: Array.from(categories).sort((a, b) => a.localeCompare(b, 'id')),
+    stats: stats
   };
 }
 
@@ -40,7 +70,10 @@ function getNotes() {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    return collectAllNotes_(getStorageFolder()).notes;
+    const snapshot = collectAllNotes_(getStorageFolder());
+    // Visible in the Apps Script Executions log; helps to see cache behaviour.
+    console.log('KeepFlow getNotes: ' + JSON.stringify(snapshot.stats));
+    return snapshot.notes;
   } finally {
     lock.releaseLock();
   }
@@ -49,12 +82,13 @@ function getNotes() {
 /**
  * Return notes and category names from one locked Drive snapshot for backup.
  * This prevents category and note lists from being read at different moments.
+ * Backups read every file directly: they never trust or modify the index.
  */
 function getBackupSnapshot() {
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
-    const snapshot = collectAllNotes_(getStorageFolder());
+    const snapshot = collectAllNotes_(getStorageFolder(), { useIndex: false });
     return {
       generatedAt: new Date().toISOString(),
       notes: snapshot.notes,

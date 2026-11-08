@@ -17,13 +17,18 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/). Se
 - Receipt idempotensi bersifat best-effort dan tahan kuota `PropertiesService` (sebelumnya restore ZIP besar dapat menyebabkan catatan ganda); pruning dibatasi maksimal sekali per jam.
 - `getNotes` dan `getBackupSnapshot` memakai satu pembaca (`collectAllNotes_`).
 
+### Performa
+- **Indeks catatan** (`NotesIndex.gs`): `getNotes` tidak lagi mengunduh isi setiap file pada setiap pemuatan. Satu file `storage/.keepflow-index.json` menyimpan hasil parse; catatan yang ID, waktu ubah, dan namanya masih sama diambil dari sana. Indeks hanya cache: bila hilang, rusak, terlalu besar, atau gagal ditulis, aplikasi membaca langsung dari file. Backup tidak memakai indeks. Pembacaan dingin yang sangat besar menulis checkpoint agar tahan batas eksekusi 6 menit.
+- Alat pemilik `benchmarkNotesRead` (jalankan dari editor Apps Script) membandingkan pembacaan langsung dan lewat indeks pada data Anda; `getNotes` juga mencatat statistik hit/baca ke log eksekusi.
+- Pemuatan pertama setelah memperbarui akan lebih lambat satu kali karena indeks dibangun.
+
 ### UI/UX dan aksesibilitas
 - Pratinjau dan pencarian memisahkan paragraf/item checklist dengan benar (☐/☑); sebelumnya kata antar-blok menyatu.
 - Notifikasi non-blokir (toast) menggantikan 27 `alert()`.
 - Hasil axe-core: 0 pelanggaran pada daftar catatan dan editor (desktop/mobile, terang/gelap); sebelumnya 3-5 jenis. Perbaikan: kontras teks abu-abu di tema terang, ARIA kolom cari, nama tombol Inbox, label checkbox checklist, role loader.
 
 ### Rekayasa
-- Tes otomatis tanpa dependensi (`node --test tests/*.test.js`, 35 tes): sintaks, kontrak klien-server, format v2 (uji silang klien/server termasuk uji acak), dan logika backend dengan tiruan Drive.
+- Tes otomatis tanpa dependensi (`node --test tests/*.test.js`, 59 tes): sintaks, kontrak klien-server, format v2 (uji silang klien/server termasuk uji acak), logika backend, dan indeks catatan dengan tiruan Drive.
 - `appsscript.json` (V8, scope `drive` saja, web app "Only myself") dan workflow GitHub Actions.
 
 ### Diperbaiki

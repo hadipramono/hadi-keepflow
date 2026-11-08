@@ -16,7 +16,7 @@ const PUBLIC_API = ['getNotes', 'getBackupSnapshot', 'getCategories', 'getLegacy
 
 test('semua file .gs dapat dikompilasi', () => {
   gsFiles.forEach(file => assert.doesNotThrow(() => new vm.Script(read(file), { filename: file }), file));
-  assert.ok(gsFiles.includes('NoteFormat.gs'));
+  assert.ok(gsFiles.includes('NoteFormat.gs') && gsFiles.includes('NotesIndex.gs'));
 });
 
 test('script inline AppScripts.html dapat dikompilasi', () => {
@@ -25,9 +25,12 @@ test('script inline AppScripts.html dapat dikompilasi', () => {
   assert.doesNotThrow(() => new vm.Script(match[1], { filename: 'AppScripts.html' }));
 });
 
+// Run by the owner from the Apps Script editor; the UI must never call these.
+const OWNER_TOOLS = ['benchmarkNotesRead'];
+
 test('semua fungsi API publik ada di backend', () => {
   const source = gsFiles.map(read).join('\n');
-  PUBLIC_API.concat(['doGet', 'include']).forEach(name =>
+  PUBLIC_API.concat(OWNER_TOOLS, ['doGet', 'include']).forEach(name =>
     assert.match(source, new RegExp('^function ' + name + '\\(', 'm'), 'fungsi hilang: ' + name));
 });
 
@@ -39,6 +42,7 @@ test('setiap fungsi server yang dipanggil klien ada di daftar API publik', () =>
   ].filter(name => !/^with/.test(name)));
   assert.ok(called.size >= 4, 'terlalu sedikit panggilan terdeteksi: ' + [...called]);
   called.forEach(name => assert.ok(PUBLIC_API.includes(name), 'klien memanggil fungsi di luar daftar API: ' + name));
+  OWNER_TOOLS.forEach(name => assert.ok(!client.includes(name), 'UI tidak boleh memanggil alat pemilik: ' + name));
 });
 
 test('Index.html hanya me-include partial yang diizinkan backend', () => {

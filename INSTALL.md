@@ -8,7 +8,7 @@
 
 ## Membuat project
 1. Buka https://script.google.com/ lalu buat project baru.
-2. Tambahkan file script: `Code.gs`, `DriveStorage.gs`, `NotesApi.gs`, `NoteFormat.gs`, `SyncOperations.gs`.
+2. Tambahkan file script: `Code.gs`, `DriveStorage.gs`, `NotesApi.gs`, `NoteFormat.gs`, `NotesIndex.gs`, `SyncOperations.gs`.
 3. Tambahkan file HTML: `Index.html`, `AppStyles.html`, `AppScripts.html`.
 4. Salin source dari repository ke file dengan nama yang sama. Semua file `.gs` berbagi global namespace.
 5. Buka **Project Settings → Show "appsscript.json" manifest file in editor**, lalu salin isi `appsscript.json` dari repository. Manifest ini membatasi scope OAuth hanya ke `drive`, memakai runtime V8, dan menetapkan web app *Execute as: Me* / *Only myself*.
@@ -38,8 +38,11 @@ Langkah ini wajib untuk perubahan di `Code.gs`, termasuk meta viewport (`interac
 v1.3.8 menulis catatan dalam format v2 (front matter YAML). File lama tetap terbaca dan ditingkatkan saat disimpan berikutnya, tetapi **versi aplikasi lama tidak membaca v2 dengan benar**. Sebelum memperbarui:
 
 1. Buat **Backup ZIP** dari versi lama.
-2. Perbarui source (termasuk file baru `NoteFormat.gs` dan `appsscript.json`) lalu deploy sebagai New version.
+2. Perbarui source (termasuk file baru `NoteFormat.gs`, `NotesIndex.gs`, dan `appsscript.json`) lalu deploy sebagai New version.
 3. Jangan menurunkan versi setelah mulai menyimpan catatan.
+
+## Mengukur kecepatan pemuatan
+Pemuatan pertama setelah memperbarui lebih lambat satu kali karena indeks catatan (`storage/.keepflow-index.json`) dibangun. Untuk melihat penghematan pada data Anda, buka editor Apps Script, pilih fungsi `benchmarkNotesRead`, klik **Run**, lalu baca hasilnya di **Execution log** (waktu pembacaan langsung versus lewat indeks). Bila indeks dicurigai bermasalah, hapus file tersebut di Drive; ia dibangun ulang otomatis.
 
 ## Penting
 Jangan membuka akses publik untuk deployment yang berjalan sebagai akun pemilik. Aplikasi ini belum memiliki autentikasi dan otorisasi multi-user sendiri. Lakukan pengujian pada project dan data Drive terpisah sebelum menggunakan data utama.
