@@ -80,6 +80,57 @@ function getNotes() {
 }
 
 /**
+ * Does the browser already hold exactly this note? The claim is
+ * [baseUpdatedAt, category, title, content.length], taken from a local note
+ * that has no pending edits. All four must match the Drive state; otherwise
+ * the full note is sent. A wrong or malformed claim can only cause a full
+ * note to be sent, never a missing or stale one.
+ */
+function isNoteUnchangedForClient_(note, claim) {
+  return Array.isArray(claim) && claim.length === 4 &&
+    claim[0] === note.baseUpdatedAt &&
+    claim[1] === note.category &&
+    claim[2] === note.title &&
+    claim[3] === note.content.length;
+}
+
+var NOTES_DELTA_MAX_KNOWN = 50000;
+
+/**
+ * Same snapshot as getNotes(), but a note the browser already has is replaced
+ * by a stub { id, unchanged: true } instead of being sent again.
+ * `known` maps note id -> [baseUpdatedAt, category, title, content.length].
+ * The browser rebuilds exactly the array getNotes() would have returned
+ * (see assembleDeltaNotes in AppScripts.html), so deletions, additions,
+ * moves and renames are all reflected. Invalid input is treated as "nothing
+ * known", which degrades to a full response.
+ */
+function getNotesDelta(known) {
+  const claims = known && typeof known === 'object' && !Array.isArray(known) &&
+    Object.keys(known).length <= NOTES_DELTA_MAX_KNOWN ? known : {};
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const snapshot = collectAllNotes_(getStorageFolder());
+    let unchanged = 0;
+    const notes = snapshot.notes.map(note => {
+      const claim = Object.prototype.hasOwnProperty.call(claims, note.id) ? claims[note.id] : null;
+      if (isNoteUnchangedForClient_(note, claim)) {
+        unchanged++;
+        return { id: note.id, unchanged: true };
+      }
+      return note;
+    });
+    console.log('KeepFlow getNotesDelta: ' + JSON.stringify(Object.assign({}, snapshot.stats, {
+      total: notes.length, unchanged: unchanged, sent: notes.length - unchanged
+    })));
+    return { format: 1, notes: notes };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
  * Return notes and category names from one locked Drive snapshot for backup.
  * This prevents category and note lists from being read at different moments.
  * Backups read every file directly: they never trust or modify the index.

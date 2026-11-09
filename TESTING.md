@@ -46,6 +46,26 @@ Uji pada URL `/exec`, orientasi portrait dan landscape.
 - [ ] Backup ZIP berisi semua catatan dan tidak mengubah file indeks.
 - [ ] (Vault besar, ratusan catatan) Muat pertama setelah indeks dihapus selesai tanpa error batas waktu; bila terputus, muat ulang melanjutkan lebih cepat.
 
+## 2d. Protokol delta (Apps Script nyata)
+- [ ] Muat aplikasi dua kali berturut-turut: log eksekusi `KeepFlow getNotesDelta: ...` pada muat kedua menunjukkan `unchanged` mendekati jumlah catatan dan `sent` mendekati 0.
+- [ ] Ubah satu catatan di tab/perangkat lain, muat ulang di tab pertama: hanya catatan itu yang `sent` dan isinya terbaru.
+- [ ] Hapus satu catatan di perangkat lain lalu muat ulang: catatan itu hilang dari daftar.
+- [ ] Pindahkan catatan ke kategori lain (juga lewat Drive langsung): kategori di daftar ikut berubah.
+- [ ] Edit catatan saat offline, lalu online: perubahan lokal tidak tertimpa dan tersinkron.
+- [ ] Mengetik/menyimpan catatan sementara pemuatan ulang berjalan: edit tidak hilang.
+- [ ] Deploy hanya frontend baru dengan backend lama (tanpa `getNotesDelta`): aplikasi tetap memuat data lewat fallback penuh tanpa error yang terlihat.
+
+## 2e. Cache lokal IndexedDB (perangkat nyata, di dalam Apps Script)
+Buka DevTools > Application > IndexedDB > `hadi_keepflow` (desktop), atau uji perilaku di perangkat.
+
+- [ ] Dari versi lama yang sudah punya cache: setelah update catatan tetap tampil (offline pun) dan database `hadi_keepflow` berisi satu record per catatan; kunci `hadi_keepflow_offline_notes_v1` di localStorage sudah hilang.
+- [ ] Matikan jaringan, ubah catatan, tutup tab, buka lagi (masih offline): perubahan tidak hilang (antrean + cache).
+- [ ] Dengan banyak catatan besar (total >5 MB, mis. impor ZIP besar): tidak muncul "Data terlalu besar untuk disimpan lokal" dan data kembali setelah muat ulang.
+- [ ] iOS Safari dan Android Chrome di dalam halaman `/exec` (iframe): cache tersimpan (periksa bahwa status tidak menampilkan "Gagal memperbarui cache lokal").
+- [ ] Mode privat/penyimpanan dibatasi: aplikasi tetap berfungsi (fallback localStorage atau tanpa cache).
+- [ ] Hapus data situs lalu buka lagi: semua catatan kembali dari Drive.
+- [ ] Dua tab terbuka: ubah di tab A, muat ulang tab B; pastikan tidak ada data hilang setelah sinkronisasi (sinkronisasi antar-tab belum ada, lihat ROADMAP).
+
 ## 3. Catatan dan kategori
 - [ ] Buat, ubah, pin, arsip, dan hapus catatan; file di Drive ikut berubah.
 - [ ] Buat, ubah nama, dan hapus kategori kosong.

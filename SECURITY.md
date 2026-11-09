@@ -11,7 +11,7 @@ Rekomendasi deployment:
 ## Penyimpanan data
 - Catatan persisten disimpan di Google Drive.
 - `storage/.keepflow-index.json` menduplikasi isi semua catatan sebagai cache. Aksesnya sama dengan folder catatan; perlakukan sama saat berbagi folder penyimpanan. Jangan pernah meng-commit folder penyimpanan ke repository.
-- Cache, draft, preferensi, dan antrean operasi disimpan di LocalStorage browser.
+- Cache catatan disimpan di IndexedDB browser; draft, preferensi, dan antrean operasi di LocalStorage. Keduanya tidak dienkripsi dan berisi isi catatan Anda. Pada perangkat bersama, keluar dari akun Google atau hapus data situs setelah selesai.
 - Konten catatan tidak dienkripsi oleh aplikasi.
 - Backup ZIP dapat berisi seluruh isi catatan; perlakukan sebagai data pribadi.
 

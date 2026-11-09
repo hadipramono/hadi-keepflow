@@ -15,6 +15,8 @@
 | Penghapusan kategori kosong | Implemented | Uji integrasi Drive |
 | Format penyimpanan v2 (YAML front matter) | Implemented; lulus tes dengan tiruan Drive | Uji di Drive nyata, termasuk membuka file lama v1 |
 | Indeks catatan (pemuatan cepat) | Implemented; lulus tes dengan tiruan Drive | Ukur dengan `benchmarkNotesRead` di Apps Script; uji checkpoint pada data besar |
+| Cache lokal IndexedDB | Implemented; lulus tes Node (fake-indexeddb) dan Chromium | Uji di perangkat nyata dan di dalam iframe Apps Script (iOS Safari, Android Chrome); migrasi dari data lama |
+| Protokol delta `getNotesDelta` | Implemented; lulus tes Node dan browser (server palsu) | Uji di Apps Script nyata: edit saat memuat, dua tab, server lama |
 | Keamanan single-user | Batasan diketahui | Review izin deployment |
 
 ## Prioritas berikutnya
@@ -28,11 +30,11 @@
 ## Temuan audit yang belum dikerjakan
 Lihat tabel lengkap di [`AUDIT.md`](AUDIT.md). Prioritas teratas:
 
-1. Jalankan `benchmarkNotesRead` di Apps Script pada data nyata dan catat hasilnya. Bila transfer respons ternyata dominan, lanjutkan ke protokol delta (klien mengirim ID+versi, server hanya mengirim yang berubah).
-2. Pindahkan cache lokal dari `localStorage` ke IndexedDB.
-3. Konversi isi catatan ke Markdown murni (field `content_type` sudah disiapkan).
-4. Backup otomatis terjadwal ke folder Drive terpisah.
-5. Tes browser (Playwright) di CI.
+1. Jalankan `benchmarkNotesRead` di Apps Script pada data nyata dan catat hasilnya; periksa juga baris `KeepFlow getNotesDelta` di Execution log (`unchanged` versus `sent`).
+2. Konversi isi catatan ke Markdown murni (field `content_type` sudah disiapkan).
+3. Backup otomatis terjadwal ke folder Drive terpisah.
+4. Tes browser (Playwright) di CI.
+5. Antrean operasi dan draf ke IndexedDB dengan durabilitas setara, serta sinkronisasi antar-tab (`BroadcastChannel`).
 
 ## Utang teknis
 

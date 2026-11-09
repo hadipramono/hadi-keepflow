@@ -19,8 +19,16 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/). Se
 
 ### Performa
 - **Indeks catatan** (`NotesIndex.gs`): `getNotes` tidak lagi mengunduh isi setiap file pada setiap pemuatan. Satu file `storage/.keepflow-index.json` menyimpan hasil parse; catatan yang ID, waktu ubah, dan namanya masih sama diambil dari sana. Indeks hanya cache: bila hilang, rusak, terlalu besar, atau gagal ditulis, aplikasi membaca langsung dari file. Backup tidak memakai indeks. Pembacaan dingin yang sangat besar menulis checkpoint agar tahan batas eksekusi 6 menit.
+- **Protokol delta** (`getNotesDelta`): pemuatan ulang tidak lagi mengirim ulang isi semua catatan. Klien melaporkan catatan bersih yang dimilikinya (`[versi, kategori, judul, panjang isi]`); server membalas stub untuk yang tidak berubah dan catatan penuh hanya untuk yang berubah/baru. Hasil rakitan klien identik dengan `getNotes()`; respons tak valid atau kegagalan memicu satu fallback ke `getNotes()` penuh. Edit lokal yang antre tidak pernah tertimpa.
 - Alat pemilik `benchmarkNotesRead` (jalankan dari editor Apps Script) membandingkan pembacaan langsung dan lewat indeks pada data Anda; `getNotes` juga mencatat statistik hit/baca ke log eksekusi.
 - Pemuatan pertama setelah memperbarui akan lebih lambat satu kali karena indeks dibangun.
+
+### Penyimpanan lokal
+- **Cache catatan pindah dari `localStorage` ke IndexedDB** (`NotesCache`): satu record per catatan, hanya yang berubah yang ditulis, urutan terjaga, tanpa batas ±5 MB. Sebelumnya, pada ±8 MB data penyimpanan gagal dan setelah muat ulang tidak ada catatan tersisa.
+- Migrasi otomatis dalam satu transaksi dengan verifikasi jumlah; salinan lama dihapus hanya setelah terverifikasi. Bila IndexedDB tidak tersedia, gagal, atau tidak merespons, aplikasi kembali ke `localStorage`.
+- Antrean operasi dan draf editor **tetap** di `localStorage` dan ditulis sinkron (jaminan durabilitas tidak berubah). Catatan yang hanya ada di antrean dipulihkan saat startup.
+- Perbaikan: promise transaksi yang ditolak setelah pengecualian sinkron tidak lagi memicu `unhandledRejection`.
+- Pemuatan ulang memakai catatan di memori (selalu tersimpan) alih-alih membaca ulang penyimpanan.
 
 ### UI/UX dan aksesibilitas
 - Pratinjau dan pencarian memisahkan paragraf/item checklist dengan benar (☐/☑); sebelumnya kata antar-blok menyatu.
@@ -28,7 +36,7 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/). Se
 - Hasil axe-core: 0 pelanggaran pada daftar catatan dan editor (desktop/mobile, terang/gelap); sebelumnya 3-5 jenis. Perbaikan: kontras teks abu-abu di tema terang, ARIA kolom cari, nama tombol Inbox, label checkbox checklist, role loader.
 
 ### Rekayasa
-- Tes otomatis tanpa dependensi (`node --test tests/*.test.js`, 59 tes): sintaks, kontrak klien-server, format v2 (uji silang klien/server termasuk uji acak), logika backend, dan indeks catatan dengan tiruan Drive.
+- Tes otomatis tanpa dependensi (`npm test`, 93 tes; dependensi dev: `fake-indexeddb`): sintaks, kontrak klien-server, format v2 (uji silang klien/server termasuk uji acak), logika backend, dan indeks catatan dengan tiruan Drive.
 - `appsscript.json` (V8, scope `drive` saja, web app "Only myself") dan workflow GitHub Actions.
 
 ### Diperbaiki

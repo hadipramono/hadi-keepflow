@@ -562,6 +562,300 @@
       }
     }
 
+    // <notes-cache>
+    // Local cache of all notes. Uses IndexedDB when available: no 5 MB limit, one
+    // record per note, and only notes that changed are written. Falls back to
+    // localStorage (the previous behaviour) when IndexedDB is missing, fails or
+    // does not answer.
+    //
+    // It is only a cache. Unsynced edits are recorded in the pending-operation
+    // queue (localStorage, written synchronously) and Drive is the source of
+    // truth, so a failed or lost cache write never loses user data.
+    const NotesCache = (() => {
+      const DB_NAME = 'hadi_keepflow';
+      const DB_VERSION = 1;
+      const config = { openTimeoutMs: 4000 };
+      const stats = { flushes: 0, puts: 0, deletes: 0 };
+      const persisted = new Map();      // note id -> JSON of the record last written
+      let persistedOrder = '';
+      let db = null;
+      let mode = 'unloaded';            // 'unloaded' | 'idb' | 'localstorage'
+      let ready = false;
+      let scheduled = false;
+      let flushing = null;
+      let again = false;
+      let getNotes = () => [];
+      let onError = () => {};
+
+      const requestResult = request => new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+
+      const transactionDone = transaction => {
+        const done = new Promise((resolve, reject) => {
+          transaction.oncomplete = () => resolve();
+          transaction.onerror = event => reject((event && event.target && event.target.error) || transaction.error);
+          transaction.onabort = () => reject(transaction.error || new Error('Transaksi IndexedDB dibatalkan'));
+        });
+        // A synchronous error while queueing requests (DataCloneError, an already
+        // aborted transaction) can throw before the caller awaits `done`. Without
+        // this no-op handler that later rejection would be reported as unhandled.
+        done.catch(() => {});
+        return done;
+      };
+
+      function openDatabase() {
+        return new Promise((resolve, reject) => {
+          if (typeof indexedDB === 'undefined' || !indexedDB) {
+            reject(new Error('IndexedDB tidak tersedia'));
+            return;
+          }
+          let settled = false;
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            reject(new Error('IndexedDB tidak merespons'));
+          }, config.openTimeoutMs);
+          let request;
+          try {
+            request = indexedDB.open(DB_NAME, DB_VERSION);
+          } catch (error) {
+            clearTimeout(timer);
+            reject(error);
+            return;
+          }
+          request.onupgradeneeded = () => {
+            const database = request.result;
+            if (!database.objectStoreNames.contains('notes')) database.createObjectStore('notes');
+            if (!database.objectStoreNames.contains('meta')) database.createObjectStore('meta');
+          };
+          request.onsuccess = () => {
+            clearTimeout(timer);
+            if (settled) { request.result.close(); return; }
+            settled = true;
+            resolve(request.result);
+          };
+          request.onerror = () => {
+            clearTimeout(timer);
+            if (settled) return;
+            settled = true;
+            reject(request.error);
+          };
+        });
+      }
+
+      function readLocalStorage() {
+        try {
+          const value = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null');
+          return Array.isArray(value) ? value : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function writeLocalStorage() {
+        try {
+          localStorage.setItem(LOCAL_KEY, JSON.stringify(getNotes()));
+        } catch (error) {
+          onError(error);
+        }
+      }
+
+      const validRecord = value => value && typeof value === 'object' && !Array.isArray(value);
+
+      // Order matters until the first cloud refresh, so it is stored explicitly
+      // (IndexedDB returns records sorted by key).
+      function sortByOrder(keys, values, order) {
+        const position = new Map((Array.isArray(order) ? order : []).map((id, index) => [id, index]));
+        return keys
+          .map((key, index) => ({ key: String(key), value: values[index] }))
+          .filter(item => validRecord(item.value))
+          .sort((a, b) => (position.has(a.key) ? position.get(a.key) : Infinity) - (position.has(b.key) ? position.get(b.key) : Infinity));
+      }
+
+      function remember(items) {
+        persisted.clear();
+        items.forEach(item => persisted.set(item.key, JSON.stringify(item.value)));
+        persistedOrder = JSON.stringify(items.map(item => item.key));
+      }
+
+      // Move the old localStorage cache into IndexedDB in ONE transaction, verify
+      // the count, and only then drop the old copy.
+      async function migrateFromLocalStorage(legacy) {
+        const unique = new Map();
+        legacy.forEach(note => {
+          if (validRecord(note) && note.id != null) unique.set(String(note.id), note);
+        });
+        const transaction = db.transaction(['notes', 'meta'], 'readwrite');
+        const done = transactionDone(transaction);
+        const store = transaction.objectStore('notes');
+        unique.forEach((note, id) => store.put(note, id));
+        transaction.objectStore('meta').put([...unique.keys()], 'order');
+        transaction.objectStore('meta').put(true, 'migrated');
+        await done;
+        const count = await requestResult(db.transaction('notes', 'readonly').objectStore('notes').count());
+        if (count !== unique.size) throw new Error('Verifikasi migrasi cache gagal');
+        try { localStorage.removeItem(LOCAL_KEY); } catch { /* harmless: stale copy is ignored */ }
+        remember([...unique.entries()].map(([key, value]) => ({ key, value })));
+        return [...unique.values()];
+      }
+
+      async function loadFromIndexedDb() {
+        const transaction = db.transaction(['notes', 'meta'], 'readonly');
+        const notesStore = transaction.objectStore('notes');
+        const metaStore = transaction.objectStore('meta');
+        const [keys, values, migrated, order] = await Promise.all([
+          requestResult(notesStore.getAllKeys()),
+          requestResult(notesStore.getAll()),
+          requestResult(metaStore.get('migrated')),
+          requestResult(metaStore.get('order'))
+        ]);
+        const items = sortByOrder(keys, values, order);
+        const legacy = readLocalStorage();
+
+        if (!migrated && !items.length && legacy && legacy.length) {
+          return migrateFromLocalStorage(legacy);
+        }
+        // IndexedDB wins from here on: mark it, and drop any stale localStorage
+        // copy (for example left by an older app version). The cache is never
+        // merged; Drive and the pending queue are the source of truth.
+        if (!migrated) db.transaction('meta', 'readwrite').objectStore('meta').put(true, 'migrated');
+        if (legacy) {
+          try { localStorage.removeItem(LOCAL_KEY); } catch { /* ignore */ }
+        }
+        remember(items);
+        return items.map(item => item.value);
+      }
+
+      function useLocalStorage() {
+        if (db) { try { db.close(); } catch { /* ignore */ } }
+        db = null;
+        mode = 'localstorage';
+      }
+
+      async function load() {
+        let list = null;
+        try {
+          db = await openDatabase();
+          db.onversionchange = () => useLocalStorage();
+          mode = 'idb';
+          list = await loadFromIndexedDb();
+        } catch (error) {
+          console.warn('KeepFlow: IndexedDB tidak dipakai, kembali ke localStorage:', error);
+          useLocalStorage();
+          list = null;
+        }
+        if (mode === 'localstorage') list = readLocalStorage() || [];
+        ready = true;
+        return list;
+      }
+
+      async function writeDifferences() {
+        const entries = [];
+        const order = [];
+        const seen = new Set();
+        getNotes().forEach(note => {
+          if (!validRecord(note) || note.id == null) return;
+          const id = String(note.id);
+          if (seen.has(id)) return;
+          seen.add(id);
+          order.push(id);
+          const json = JSON.stringify(note);
+          if (persisted.get(id) !== json) entries.push([id, note, json]);
+        });
+        const removed = [];
+        persisted.forEach((json, id) => { if (!seen.has(id)) removed.push(id); });
+        const orderJson = JSON.stringify(order);
+        if (!entries.length && !removed.length && orderJson === persistedOrder) return;
+
+        const transaction = db.transaction(['notes', 'meta'], 'readwrite');
+        const done = transactionDone(transaction);
+        const store = transaction.objectStore('notes');
+        entries.forEach(([id, note]) => store.put(note, id));
+        removed.forEach(id => store.delete(id));
+        if (orderJson !== persistedOrder) transaction.objectStore('meta').put(order, 'order');
+        await done;
+
+        entries.forEach(([id, note, json]) => persisted.set(id, json));
+        removed.forEach(id => persisted.delete(id));
+        persistedOrder = orderJson;
+        stats.flushes += 1;
+        stats.puts += entries.length;
+        stats.deletes += removed.length;
+      }
+
+      function flush() {
+        if (mode !== 'idb' || !db) return Promise.resolve();
+        if (flushing) { again = true; return flushing; }
+        flushing = (async () => {
+          try {
+            do {
+              again = false;
+              await writeDifferences();
+            } while (again);
+          } catch (error) {
+            // Nothing was marked as persisted, so the next save() retries.
+            onError(error);
+          } finally {
+            flushing = null;
+          }
+        })();
+        return flushing;
+      }
+
+      // Called after every change. Nothing is written until load() has finished,
+      // otherwise an empty in-memory list would wipe the stored cache.
+      function save() {
+        if (!ready) return;
+        if (mode === 'localstorage') { writeLocalStorage(); return; }
+        if (mode !== 'idb' || scheduled) return;
+        scheduled = true;
+        Promise.resolve().then(() => { scheduled = false; return flush(); });
+      }
+
+      // For pagehide/visibilitychange: start writing right now.
+      function flushNow() {
+        if (!ready) return Promise.resolve();
+        if (mode === 'localstorage') { writeLocalStorage(); return Promise.resolve(); }
+        scheduled = false;
+        return flush();
+      }
+
+      return {
+        init(options) {
+          if (options && typeof options.getNotes === 'function') getNotes = options.getNotes;
+          if (options && typeof options.onError === 'function') onError = options.onError;
+        },
+        load, save, flush, flushNow, config, stats,
+        get mode() { return mode; }
+      };
+    })();
+    // </notes-cache>
+
+    let notesCacheLoaded = false;
+    let notesCacheLoading = false;
+    NotesCache.init({
+      getNotes: () => notes,
+      onError: error => {
+        console.error('KeepFlow local cache error:', error);
+        const full = error && (error.name === 'QuotaExceededError' || /quota/i.test(String(error.message || '')));
+        setSyncStatus(full ? 'Penyimpanan perangkat penuh - cache lokal tidak diperbarui' : 'Gagal memperbarui cache lokal',
+          'fa-triangle-exclamation', 'text-red-500');
+      }
+    });
+
+    // If the cache lost a note that still has an unsynced save in the queue,
+    // restore it from the queue so it stays visible before the next sync.
+    function repairNotesFromQueue() {
+      const known = new Set(notes.map(note => String(note.id)));
+      pendingOperations.forEach(op => {
+        if (!op || op.type !== 'save' || !op.note || typeof op.note !== 'object' || known.has(String(op.id))) return;
+        notes.push(normalizeNoteRecord({ ...cloneData(op.note), id: op.id }));
+        known.add(String(op.id));
+      });
+    }
+
     function persistLocal() {
       let queueSaved = false;
       try {
@@ -574,12 +868,8 @@
       }
 
       updateQueueIndicator();
-      try {
-        localStorage.setItem(LOCAL_KEY, JSON.stringify(notes));
-      } catch (e) {
-        console.error('KeepFlow local data persistence error:', e);
-        setSyncStatus('Data terlalu besar untuk disimpan lokal', 'fa-triangle-exclamation', 'text-red-500');
-      }
+      // The notes cache is best effort: the queue above is the recovery log.
+      NotesCache.save();
       return queueSaved;
     }
 
@@ -922,6 +1212,47 @@
       else runner.saveNote(operation.note, operation.opId);
     }
 
+    // ---------------------------------------------------------------------
+    // Delta loading. Instead of downloading every note on each refresh, tell the
+    // server which notes this browser already holds; the server answers with a
+    // stub { id, unchanged: true } for those (see getNotesDelta in NotesApi.gs).
+    //
+    // Only notes WITHOUT pending local operations may be claimed: those equal
+    // the cloud baseline. The claim is [baseUpdatedAt, category, title,
+    // content.length]; the server must match all four or it sends the note.
+    // ---------------------------------------------------------------------
+    function buildDeltaBaseline() {
+      const queued = new Set(pendingOperations.map(op => String(op.id)));
+      const known = {};
+      const baseline = new Map();
+      notes.forEach(note => {
+        const id = String(note.id);
+        if (queued.has(id) || !note.baseUpdatedAt || typeof note.baseUpdatedAt !== 'string' ||
+            typeof note.title !== 'string' || typeof note.content !== 'string') return;
+        known[id] = [note.baseUpdatedAt, note.category || '', note.title, note.content.length];
+        baseline.set(id, cloneData(note));
+      });
+      return { known, baseline };
+    }
+
+    // Rebuild exactly the array getNotes() would have returned, or null when the
+    // response cannot be trusted (the caller then falls back to a full load).
+    function assembleDeltaNotes(response, baseline) {
+      if (!response || response.format !== 1 || !Array.isArray(response.notes)) return null;
+      const result = [];
+      for (const item of response.notes) {
+        if (!item || typeof item !== 'object') return null;
+        if (item.unchanged === true) {
+          const held = baseline.get(String(item.id));
+          if (!held) return null;
+          result.push(cloneData(held));
+        } else {
+          result.push(item);
+        }
+      }
+      return result;
+    }
+
     function loadInitialData() {
       loadCategoryState();
       // Never reconcile a cloud snapshot while a write is in flight. The
@@ -941,11 +1272,22 @@
         queueInitialized = true;
       }
 
-      try {
-        const localData = JSON.parse(localStorage.getItem(LOCAL_KEY) || '[]');
-        notes = Array.isArray(localData) ? localData.map(normalizeNoteRecord) : [];
-      } catch (e) {
-        notes = [];
+      // The first call reads the local cache (asynchronously, IndexedDB) and then
+      // calls this function again. Later calls reuse the in-memory notes, which
+      // are always persisted after every change.
+      if (!notesCacheLoaded) {
+        if (notesCacheLoading) return;
+        notesCacheLoading = true;
+        NotesCache.load()
+          .then(list => { notes = (Array.isArray(list) ? list : []).map(normalizeNoteRecord); })
+          .catch(error => { console.error('KeepFlow cache load error:', error); notes = []; })
+          .then(() => {
+            repairNotesFromQueue();
+            notesCacheLoaded = true;
+            notesCacheLoading = false;
+            loadInitialData();
+          });
+        return;
       }
       pruneLegacyDefaultCategoriesFromLocalState();
 
@@ -967,66 +1309,90 @@
       cloudLoadInProgress = true;
       const requestId = ++cloudLoadRequestId;
 
-      google.script.run
-        .withSuccessHandler(serverData => {
-          if (requestId !== cloudLoadRequestId) return;
-          cloudLoadInProgress = false;
+      const handleServerData = serverData => {
+        if (requestId !== cloudLoadRequestId) return;
+        cloudLoadInProgress = false;
 
-          if (!Array.isArray(serverData)) {
-            serverReady = wasServerReady;
-            setSyncStatus('Respons server tidak valid - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
-            if (refreshRequested) {
-              refreshRequested = false;
-              loadInitialData();
-            } else if (serverReady) {
-              flushPendingOperations();
-            }
-            return;
-          }
-
-          serverReady = true;
-          // Cloud is the baseline. Preserve local notes with pending saves,
-          // and apply queued deletes as tombstones so they cannot reappear.
-          const queuedSaves = new Set(pendingOperations
-            .filter(op => op.type === 'save')
-            .map(op => String(op.id)));
-          const queuedDeletes = new Set(pendingOperations
-            .filter(op => op.type === 'delete')
-            .map(op => String(op.id)));
-          const localPending = notes.filter(note => queuedSaves.has(String(note.id)));
-          const merged = new Map(serverData.map(note => [String(note.id), normalizeNoteRecord(note)]));
-          localPending.forEach(note => merged.set(String(note.id), normalizeNoteRecord(note)));
-
-          notes = [...merged.values()].filter(note => !queuedDeletes.has(String(note.id)));
-
-          // Do not treat the server response as a user edit. Pending operations
-          // remain the authoritative record of local changes until acknowledged.
-          lastObservedNotes = cloneData(notes);
-          persistLocal();
-          render();
-          refreshCloudCategories();
-
-          if (refreshRequested) {
-            refreshRequested = false;
-            loadInitialData();
-          } else {
-            flushPendingOperations();
-          }
-        })
-        .withFailureHandler(error => {
-          if (requestId !== cloudLoadRequestId) return;
-          cloudLoadInProgress = false;
+        if (!Array.isArray(serverData)) {
           serverReady = wasServerReady;
-          console.error('KeepFlow load error:', error);
-          setSyncStatus('Gagal memuat cloud - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
+          setSyncStatus('Respons server tidak valid - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
           if (refreshRequested) {
             refreshRequested = false;
             loadInitialData();
           } else if (serverReady) {
             flushPendingOperations();
           }
+          return;
+        }
+
+        serverReady = true;
+        // Cloud is the baseline. Preserve local notes with pending saves,
+        // and apply queued deletes as tombstones so they cannot reappear.
+        const queuedSaves = new Set(pendingOperations
+          .filter(op => op.type === 'save')
+          .map(op => String(op.id)));
+        const queuedDeletes = new Set(pendingOperations
+          .filter(op => op.type === 'delete')
+          .map(op => String(op.id)));
+        const localPending = notes.filter(note => queuedSaves.has(String(note.id)));
+        const merged = new Map(serverData.map(note => [String(note.id), normalizeNoteRecord(note)]));
+        localPending.forEach(note => merged.set(String(note.id), normalizeNoteRecord(note)));
+
+        notes = [...merged.values()].filter(note => !queuedDeletes.has(String(note.id)));
+
+        // Do not treat the server response as a user edit. Pending operations
+        // remain the authoritative record of local changes until acknowledged.
+        lastObservedNotes = cloneData(notes);
+        persistLocal();
+        render();
+        refreshCloudCategories();
+
+        if (refreshRequested) {
+          refreshRequested = false;
+          loadInitialData();
+        } else {
+          flushPendingOperations();
+        }
+      };
+      const handleLoadFailure = error => {
+        if (requestId !== cloudLoadRequestId) return;
+        cloudLoadInProgress = false;
+        serverReady = wasServerReady;
+        console.error('KeepFlow load error:', error);
+        setSyncStatus('Gagal memuat cloud - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
+        if (refreshRequested) {
+          refreshRequested = false;
+          loadInitialData();
+        } else if (serverReady) {
+          flushPendingOperations();
+        }
+      };
+      const requestFullNotes = () => {
+        google.script.run
+          .withSuccessHandler(handleServerData)
+          .withFailureHandler(handleLoadFailure)
+          .getNotes();
+      };
+
+      // Prefer the delta request; any problem falls back to one full load.
+      const { known, baseline } = buildDeltaBaseline();
+      if (baseline.size === 0) {
+        requestFullNotes();
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(response => {
+          if (requestId !== cloudLoadRequestId) return;
+          const assembled = assembleDeltaNotes(response, baseline);
+          if (assembled) handleServerData(assembled);
+          else requestFullNotes();
         })
-        .getNotes();
+        .withFailureHandler(error => {
+          if (requestId !== cloudLoadRequestId) return;
+          console.warn('KeepFlow delta load failed, using full load:', error);
+          requestFullNotes();
+        })
+        .getNotesDelta(known);
     }
 
     // Backward-compatible entry point used by existing UI actions.
@@ -3753,9 +4119,12 @@
       loadInitialData();
     });
 
+    window.addEventListener('pagehide', () => { NotesCache.flushNow(); });
+
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible') {
         flushEditorDraftNow();
+        NotesCache.flushNow();
         return;
       }
       // Recover timers that may have been throttled while the tab was hidden.

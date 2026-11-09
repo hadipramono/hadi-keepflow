@@ -10,7 +10,7 @@ Tanggal: 2026-11-08. Cakupan: keamanan, kode, cara dan format penyimpanan, keand
 - ESLint pada seluruh JavaScript: tidak ada variabel tak terdefinisi, duplikat, atau kode tak terjangkau; hanya 10 parameter `catch` yang tidak dipakai.
 - axe-core (WCAG 2.0/2.1 A/AA + best practice) pada daftar catatan dan editor, desktop dan mobile, tema terang dan gelap.
 - Proof-of-concept untuk temuan keamanan.
-- Tes otomatis baru (`tests/`, 59 tes) dan uji mutasi untuk memastikan tes benar-benar menangkap kerusakan.
+- Tes otomatis baru (`tests/`, 93 tes) dan uji mutasi untuk memastikan tes benar-benar menangkap kerusakan.
 
 ## Temuan dan status
 
@@ -30,14 +30,17 @@ Tanggal: 2026-11-08. Cakupan: keamanan, kode, cara dan format penyimpanan, keand
 | U3 | UX | 27 `alert()` yang memblokir halaman (bermasalah di iframe Apps Script). | Rendah | **Diganti** toast non-blokir (`role` sesuai tingkat) |
 | U4 | UX | Dock mobile tertutup keyboard; lima tombol tidak muat. | Tinggi | **Diperbaiki** (lihat CHANGELOG) |
 | P1 | Performa | `getNotes` mengunduh isi **setiap** file Drive pada setiap pemuatan (satu panggilan per file), sambil memegang `ScriptLock` sehingga penyimpanan ikut tertahan. | Tinggi (pada banyak catatan) | **Diperbaiki** dengan indeks catatan (lihat bagian Performa). Belum diukur di Drive nyata. |
+| P2 | Performa | Respons `getNotes` mengirim seluruh isi semua catatan pada setiap pemuatan (biaya transfer dan parse di browser), walau hampir semuanya tidak berubah. | Sedang | **Diperbaiki** dengan protokol delta `getNotesDelta` (lihat bagian Performa). |
+| P3 | Penyimpanan lokal | Seluruh cache catatan ditulis sebagai **satu JSON besar ke `localStorage`** (batas ±5 MB, sinkron, menulis ulang semuanya pada setiap perubahan). Pada ±8 MB data, penyimpanan gagal dan **setelah muat ulang tidak ada catatan tersisa** (terbukti pada uji pembanding). | Tinggi (offline) | **Diperbaiki** dengan cache IndexedDB (lihat bagian Cache lokal). |
 | E1 | Rekayasa | Tidak ada tes, manifest, atau CI. | Sedang | **Ditambah** (`tests/`, `appsscript.json`, GitHub Actions) |
 
 ## Temuan terbuka (belum dikerjakan)
 
 | # | Temuan | Usulan |
 |---|---|---|
-| O1 | Respons `getNotes` masih berisi seluruh isi semua catatan pada setiap pemuatan (biaya transfer, bukan biaya Drive). | Setelah P1 diukur di Drive nyata: protokol delta (klien mengirim ID+versi yang dimilikinya, server hanya mengirim yang berubah). |
-| O2 | Cache lokal memakai `localStorage` (±5 MB, sinkron, memblokir UI) berisi seluruh isi catatan. | Pindah ke IndexedDB. |
+| O1 | Waktu nyata P1/P2 di Apps Script belum diukur. | Jalankan `benchmarkNotesRead` dan catat angkanya; periksa baris `KeepFlow getNotesDelta` di Execution log (`unchanged` vs `sent`). |
+| O2 | Antrean operasi dan draf editor masih di `localStorage` (±5 MB bersama preferensi). Satu catatan antre sangat besar bisa tetap membentur batas itu. | Pindahkan antrean ke IndexedDB dengan jaminan durabilitas yang setara (butuh desain tersendiri; lihat catatan di bawah). |
+| O11 | Banyak tab: tab kedua tidak mengetahui perubahan tab pertama sampai muat ulang dari cloud (sebelumnya pun tidak ada sinkronisasi antar-tab yang benar). | `BroadcastChannel` atau kunci Web Locks. |
 | O3 | `document.execCommand` sudah deprecated. | Ganti dengan Selection/Range API atau pustaka editor. |
 | O4 | 10 `confirm()` dan 5 `prompt()` masih native. | Dialog di dalam aplikasi (butuh refaktor alur async). |
 | O5 | Isi catatan adalah HTML di file `.md`. | Konversi ke Markdown murni. Butuh pembuat/pembaca Markdown dan uji bolak-balik; field `content_type: html` sudah disiapkan untuk migrasi. |
@@ -63,6 +66,38 @@ Jaminan yang diuji otomatis (12 mutasi sengaja dirusak, semuanya tertangkap):
 Hasil pada tiruan Drive (jumlah unduhan isi file, bukan waktu nyata): 300 catatan, muat pertama 300 unduhan; muat kedua **0 unduhan**; mengedit satu catatan lalu memuat: **1 unduhan**.
 
 Yang **belum** diketahui: penghematan waktu nyata di Apps Script. Jalankan `benchmarkNotesRead` dari editor Apps Script untuk mengukurnya pada data Anda.
+
+### Protokol delta (P2)
+
+Klien melaporkan catatan yang sudah dimilikinya, server membalas dengan stub `{id, unchanged: true}` untuk yang tidak berubah dan catatan penuh hanya untuk yang berubah atau baru. Klien merakit ulang **persis** array yang akan dikembalikan `getNotes()`, lalu memakai logika penggabungan yang sudah ada tanpa diubah.
+
+Prinsip keamanannya: klaim "tidak berubah" harus konservatif.
+
+- Klien hanya mengklaim catatan **tanpa operasi antrean** (sama dengan baseline cloud). Klaim berisi `[versi, kategori, judul, panjang isi]`; server harus cocok pada keempatnya, kalau tidak catatan penuh dikirim. Klaim yang salah atau cacat hanya berakibat dikirimnya catatan penuh, tidak pernah catatan yang hilang atau basi.
+- Penghapusan, penambahan, pindah kategori, dan rename tercermin karena server selalu mengirim daftar lengkap ID; stub hanya menggantikan isinya.
+- Edit pengguna selama permintaan berlangsung tidak tertimpa: operasi antrean tetap menang (diuji di browser).
+- Respons tak valid, stub untuk ID yang tidak diklaim, atau kegagalan delta (misalnya server lama) memicu **satu** fallback ke `getNotes()` penuh.
+
+Diuji: uji invarian acak 160 langkah (perubahan server acak, klaim klien acak) di mana hasil rakitan harus sama dengan `getNotes()`; 9 mutasi sengaja pada pemeriksaan keamanan, semuanya tertangkap; dan 19 pemeriksaan integrasi browser dengan `google.script.run` palsu. Pada tiruan Drive dengan 40 catatan, respons delta bersih berukuran kurang dari 15% respons penuh.
+
+### Cache lokal: IndexedDB (P3)
+
+Cache catatan kini di IndexedDB (`NotesCache` di `AppScripts.html`): satu record per catatan, hanya catatan yang berubah yang ditulis, urutan tersimpan eksplisit, dan tidak ada batas 5 MB.
+
+Keputusan desain yang disengaja:
+
+- **Hanya cache catatan yang pindah.** Antrean operasi dan draf editor tetap di `localStorage` dan ditulis **sinkron**. `persistLocal()` sejak awal hanya mengembalikan status antrean, jadi cache catatan memang sudah diperlakukan sebagai best-effort; Drive adalah sumber kebenaran dan antrean adalah log pemulihan. Penulisan IndexedDB yang asinkron tidak mengubah jaminan itu.
+- **Migrasi aman.** Data `localStorage` lama dipindah dalam **satu transaksi**, jumlahnya diverifikasi, dan baru kemudian salinan lama dihapus. Bila migrasi gagal, salinan lama tidak disentuh dan aplikasi memakai `localStorage` seperti sebelumnya.
+- **Fallback.** IndexedDB tidak tersedia, melempar kesalahan, atau tidak merespons dalam 4 detik: kembali ke `localStorage` (diuji).
+- **Tidak menimpa sebelum dimuat.** Penulisan ditunda sampai pemuatan awal selesai, agar daftar kosong di memori tidak menghapus cache.
+- **Pemulihan dari antrean.** Catatan yang hanya ada di antrean (cache hilang) dipulihkan ke daftar saat startup.
+- **Pembersihan.** Salinan `localStorage` basi (misalnya dari versi aplikasi lama) diabaikan dan dihapus; cache tidak pernah digabung.
+
+Hasil nyata di Chromium (40 catatan x 200 KB = 8 MB): versi lama menampilkan "Data terlalu besar untuk disimpan lokal" dan 0 catatan tersisa setelah muat ulang; versi baru mempertahankan ke-40 catatan, dan mengubah satu catatan hanya menulis satu record.
+
+Bug yang ditemukan lewat uji mutasi: promise `transactionDone` yang ditolak setelah pengecualian sinkron menghasilkan `unhandledRejection` (error "Uncaught (in promise)" di konsol browser). Sudah diperbaiki dan dijaga tes.
+
+Perlu diketahui: `navigator.storage.persist()` sengaja **tidak** dipanggil (Firefox menampilkan dialog izin). Browser tetap boleh membersihkan IndexedDB saat penyimpanan perangkat menipis; itu aman karena cache dibangun ulang dari Drive.
 
 ## Hal yang sudah baik (dipertahankan)
 

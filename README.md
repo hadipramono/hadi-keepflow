@@ -5,7 +5,7 @@ Aplikasi Personal Knowledge Management (PKM) ringan berbasis **Google Apps Scrip
 ## Fitur
 
 - Catatan tersimpan sebagai file `.md` di Google Drive: front matter YAML standar + isi HTML sederhana (subset yang aman).
-- Cache, draft editor, preferensi, dan antrean sinkronisasi offline di browser.
+- Cache catatan (IndexedDB), draft editor, preferensi, dan antrean sinkronisasi offline di browser.
 - Pencarian, filter, tag, pin, arsip, checklist, template, dan editor fokus.
 - Backup/restore ZIP.
 - Temporary Inbox untuk catatan tanpa kategori.
@@ -18,7 +18,7 @@ Aplikasi Personal Knowledge Management (PKM) ringan berbasis **Google Apps Scrip
 - **Umum** adalah folder legacy yang dilindungi; tidak dapat dihapus sebagai kategori biasa.
 - Kategori hanya dapat dihapus jika kosong. Catatan tidak dipindahkan atau dihapus ketika kategori ditolak karena masih berisi catatan.
 - Catatan pinned tetap dihitung dalam kategori; catatan archived tidak dihitung dalam hitungan aktif.
-- Google Drive adalah sumber data persisten. LocalStorage hanya untuk cache, draft, preferensi, dan antrean operasi.
+- Google Drive adalah sumber data persisten. Browser (IndexedDB dan LocalStorage) hanya untuk cache, draft, preferensi, dan antrean operasi.
 
 ## Struktur repository
 
@@ -34,7 +34,8 @@ Aplikasi Personal Knowledge Management (PKM) ringan berbasis **Google Apps Scrip
 ├── AppStyles.html       CSS dan responsive layout
 ├── AppScripts.html      UI, state, editor, pencarian, offline queue
 ├── appsscript.json      Manifest Apps Script (scope, akses web app)
-├── tests/               Tes otomatis (node --test)
+├── package.json         Skrip tes dan dependensi dev (fake-indexeddb)
+├── tests/               Tes otomatis (npm test)
 ├── .github/workflows/   CI
 ├── AUDIT.md             Laporan audit dan temuan terbuka
 ├── INSTALL.md           Instalasi, deployment, dan pembaruan
@@ -75,7 +76,8 @@ content_type: html
 ```text
 Browser
 ├── Index.html / AppStyles.html / AppScripts.html
-└── LocalStorage     Cache, draft, preferensi, pending operations
+├── IndexedDB        Cache catatan (satu record per catatan)
+└── LocalStorage     Draft, preferensi, antrean operasi (ditulis sinkron)
          │ google.script.run
          ▼
 Google Apps Script

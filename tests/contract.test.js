@@ -11,7 +11,7 @@ const read = name => fs.readFileSync(path.join(root, name), 'utf8');
 const gsFiles = fs.readdirSync(root).filter(f => f.endsWith('.gs'));
 
 // Functions the browser is allowed to call through google.script.run.
-const PUBLIC_API = ['getNotes', 'getBackupSnapshot', 'getCategories', 'getLegacyInboxMigrationStatus',
+const PUBLIC_API = ['getNotes', 'getNotesDelta', 'getBackupSnapshot', 'getCategories', 'getLegacyInboxMigrationStatus',
   'migrateLegacyInbox', 'createCategoryFolder', 'deleteCategoryFolder', 'renameCategoryFolder', 'saveNote', 'deleteNote'];
 
 test('semua file .gs dapat dikompilasi', () => {
@@ -42,6 +42,8 @@ test('setiap fungsi server yang dipanggil klien ada di daftar API publik', () =>
   ].filter(name => !/^with/.test(name)));
   assert.ok(called.size >= 4, 'terlalu sedikit panggilan terdeteksi: ' + [...called]);
   called.forEach(name => assert.ok(PUBLIC_API.includes(name), 'klien memanggil fungsi di luar daftar API: ' + name));
+  // Calls made through a google.script.run chain are not caught above.
+  ['getNotesDelta', 'getNotes'].forEach(name => assert.match(client, new RegExp('\\.' + name + '\\('), 'klien harus memanggil ' + name));
   OWNER_TOOLS.forEach(name => assert.ok(!client.includes(name), 'UI tidak boleh memanggil alat pemilik: ' + name));
 });
 
@@ -79,4 +81,14 @@ test('versi konsisten di source dan dokumen', () => {
   assert.match(read('Index.html'), new RegExp('Hadi KeepFlow v' + version[1].replace(/\./g, '\\.')));
   assert.match(read('AppScripts.html'), new RegExp("applicationVersion: '" + version[1].replace(/\./g, '\\.') + "'"));
   assert.match(read('CHANGELOG.md'), new RegExp('## v' + version[1].replace(/\./g, '\\.')));
+});
+
+test('cache catatan hanya diakses lewat NotesCache (LOCAL_KEY tidak dipakai di luar modul)', () => {
+  const outside = read('AppScripts.html').replace(/\/\/ <notes-cache>[\s\S]*?\/\/ <\/notes-cache>/, '');
+  assert.equal((outside.match(/LOCAL_KEY/g) || []).length, 1, 'hanya deklarasi const LOCAL_KEY yang boleh ada di luar modul');
+  assert.match(read('AppScripts.html'), /NotesCache\.save\(\)/);
+});
+
+test('antrean operasi tetap ditulis sinkron ke localStorage (bukan IndexedDB)', () => {
+  assert.match(read('AppScripts.html'), /localStorage\.setItem\(QUEUE_KEY, JSON\.stringify\(pendingOperations\)\)/);
 });
