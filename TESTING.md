@@ -97,6 +97,20 @@ Buka DevTools > Application > IndexedDB > `hadi_keepflow` (desktop), atau uji pe
 - [ ] Keyboard: Tab/Shift+Tab tetap di dialog, Enter mengonfirmasi, Escape membatalkan, dan fokus kembali ke pemicu.
 - [ ] Uji tema terang/gelap, viewport desktop/mobile, serta screen reader.
 
+
+## 5c. Sinkronisasi antar-tab
+- [ ] Buka KeepFlow pada dua tab dengan origin/deployment yang sama.
+- [ ] Buat catatan di Tab A; Tab B memperbarui daftar tanpa reload manual.
+- [ ] Edit judul/isi/kategori di Tab A; Tab B menampilkan versi terbaru setelah refresh otomatis.
+- [ ] Hapus catatan di Tab A; Tab B tidak menampilkan catatan yang sudah dihapus.
+- [ ] Buat, ubah nama, dan hapus kategori; navigasi kategori di tab lain ikut diperbarui.
+- [ ] Saat Tab B sedang mengedit, perubahan dari Tab A tidak menimpa field editor; setelah editor ditutup, tab memuat ulang data.
+- [ ] Edit catatan yang sama di dua tab; konflik ditangani melalui optimistic concurrency dan dialog internal.
+- [ ] Simulasikan offline di Tab A, buat perubahan, lalu online kembali; antrean tidak terkirim ganda ketika Tab B juga aktif.
+- [ ] Tutup tab pemegang sync lease saat operasi berlangsung; tab lain melanjutkan setelah lease kedaluwarsa.
+- [ ] Uji browser tanpa BroadcastChannel; storage-event fallback tetap mengirim invalidation.
+- [ ] Pastikan pesan BroadcastChannel tidak memuat isi/judul catatan atau data sensitif.
+
 ## 6. Aksesibilitas
 - [ ] Tab dan Shift+Tab tetap berada di dalam editor modal.
 - [ ] Escape menutup menu tindakan lebih dulu, lalu alur tutup editor.

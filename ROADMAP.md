@@ -34,12 +34,13 @@ Lihat tabel lengkap di [`AUDIT.md`](AUDIT.md). Prioritas teratas:
 2. Konversi isi catatan ke Markdown murni (field `content_type` sudah disiapkan).
 3. Backup otomatis terjadwal ke folder Drive terpisah.
 4. Tes browser (Playwright) di CI.
-5. Antrean operasi dan draf ke IndexedDB dengan durabilitas setara, serta sinkronisasi antar-tab (`BroadcastChannel`).
+5. Antrean operasi dan draf ke IndexedDB dengan durabilitas setara. Sinkronisasi antar-tab tahap awal sudah diimplementasikan; verifikasi dua tab nyata masih diperlukan.
 
 ## Utang teknis
 
 - Ganti `document.execCommand` (sudah deprecated) pada editor rich-text dengan implementasi berbasis Selection/Range API atau pustaka editor.
-- Ganti `confirm()` (10 tempat) dan `prompt()` (5 tempat) bawaan browser dengan dialog di dalam aplikasi. `alert()` sudah diganti toast non-blokir.
+- Sinkronisasi antar-tab: implementasi awal tersedia; uji integrasi dua tab masih terbuka.
+- Dialog internal: seluruh 15 pemanggilan native `confirm()`/`prompt()` sudah diganti; `alert()` menggunakan toast non-blokir.
 - Pertimbangkan membundel Tailwind/Font Awesome/JSZip secara lokal atau menambahkan Subresource Integrity (SRI) untuk dependency CDN.
 
 ## Prinsip produk

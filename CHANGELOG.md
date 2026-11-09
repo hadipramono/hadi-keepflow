@@ -2,6 +2,21 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/). Semua rilis di bawah ini masih berstatus **kandidat** sampai checklist [`TESTING.md`](TESTING.md) selesai dijalankan pada perangkat nyata.
 
+## Perubahan berikutnya — Sinkronisasi antar-tab (belum dirilis)
+
+### Sinkronisasi dan reliabilitas
+- Menambahkan BroadcastChannel dengan fallback `storage` event untuk memberi tahu tab lain tentang perubahan catatan, antrean, dan kategori.
+- Pesan hanya membawa metadata invalidation; isi catatan tidak dikirim melalui channel.
+- Tab penerima membaca ulang antrean bersama dan merekonsiliasi data melalui alur cloud/Delta Loading yang sudah ada.
+- Refresh ditunda selama editor terbuka agar input aktif tidak ditimpa; refresh dijalankan setelah editor ditutup.
+- Menambahkan sync lease berbasis LocalStorage dengan heartbeat dan kedaluwarsa untuk mengurangi pengiriman operasi antrean ganda.
+- Menambahkan lima pemeriksaan kontrak statis untuk transport, privasi pesan, perlindungan editor, lease, dan pencegahan rebroadcast.
+
+### Batasan verifikasi
+- Test kontrak tidak menggantikan pengujian dua tab browser nyata.
+- LocalStorage lease adalah koordinasi best-effort, bukan mutex lintas-tab yang dijamin atomik pada semua kondisi.
+- Pengujian konflik dua tab, tab crash, fallback browser, dan integrasi Google Drive harus dilakukan melalui checklist `TESTING.md`.
+
 ## Perubahan berikutnya — Dialog internal (belum dirilis)
 
 ### UI/UX dan aksesibilitas

@@ -213,6 +213,7 @@
           pendingCategoryCreates = pendingCategoryCreates.filter(name => name !== category);
           reconcileCloudCategories(response.categories || [response.category]);
           persistCategoryState();
+          publishCrossTabMessage('state-changed');
           if (pendingCategoryCreates.length) syncPendingCategoryCreates();
         })
         .withFailureHandler(error => {
@@ -271,6 +272,7 @@
       currentTag = null;
       if (!pendingCategoryCreates.includes(finalName)) pendingCategoryCreates.push(finalName);
       persistCategoryState();
+      publishCrossTabMessage('state-changed');
       render();
       syncPendingCategoryCreates();
     }
@@ -580,6 +582,149 @@
     function hideLoader() {
       const loader = document.getElementById('global-loader');
       if (loader) loader.classList.add('opacity-0', 'pointer-events-none');
+    }
+
+    // ---------------------------------------------------------------------
+    // Cross-tab coordination. BroadcastChannel is the primary transport;
+    // the localStorage signal is a fallback for browsers without it.
+    // Messages are invalidation hints only: note bodies never cross the channel.
+    // ---------------------------------------------------------------------
+    const CROSS_TAB_SIGNAL_KEY = 'hadi_keepflow_cross_tab_signal_v1';
+    const CROSS_TAB_CHANNEL_NAME = 'hadi_keepflow_sync_v1';
+    const CROSS_TAB_TAB_ID = (window.crypto && typeof window.crypto.randomUUID === 'function')
+      ? window.crypto.randomUUID()
+      : 'tab_' + Date.now() + '_' + Math.random().toString(36).slice(2);
+    let crossTabChannel = null;
+    let crossTabRefreshPending = false;
+    let crossTabRefreshInProgress = false;
+    let crossTabWakeTimer = null;
+    let crossTabLastMessageId = '';
+
+    function publishCrossTabMessage(kind, details = {}) {
+      const message = {
+        id: createOperationId(),
+        source: CROSS_TAB_TAB_ID,
+        kind,
+        at: Date.now(),
+        noteId: details.noteId == null ? '' : String(details.noteId),
+        opId: details.opId || ''
+      };
+      try { if (crossTabChannel) crossTabChannel.postMessage(message); } catch (error) {
+        console.warn('KeepFlow BroadcastChannel gagal:', error);
+      }
+      try { localStorage.setItem(CROSS_TAB_SIGNAL_KEY, JSON.stringify(message)); } catch (error) {
+        // BroadcastChannel remains usable when localStorage is unavailable.
+        console.warn('KeepFlow storage signal gagal:', error);
+      }
+    }
+
+    function handleCrossTabMessage(message) {
+      if (!message || message.source === CROSS_TAB_TAB_ID || !message.id || message.id === crossTabLastMessageId) return;
+      crossTabLastMessageId = message.id;
+      if (Date.now() - Number(message.at || 0) > 30000) return;
+
+      if (message.kind === 'sync-unlocked') {
+        if (pendingOperations.length && !syncRunning && navigator.onLine) {
+          if (crossTabWakeTimer) clearTimeout(crossTabWakeTimer);
+          crossTabWakeTimer = setTimeout(() => {
+            crossTabWakeTimer = null;
+            readQueue();
+            flushPendingOperations();
+          }, 80);
+        }
+        return;
+      }
+
+      // The queue is shared by origin. Re-read it before reconciling the note
+      // cache so a remote tab's unsynced save is not mistaken for a cloud edit.
+      readQueue();
+      repairNotesFromQueue();
+      updateQueueIndicator();
+
+      const editor = document.getElementById('editor-modal');
+      const editorIsOpen = Boolean(editor && !editor.classList.contains('hidden'));
+      if (editorIsOpen) {
+        // Never replace the active editor's baseline or fields underneath the user.
+        // Refresh after the editor closes; optimistic concurrency handles same-note edits.
+        crossTabRefreshPending = true;
+        return;
+      }
+
+      if (notesCacheLoaded && !notesCacheLoading) {
+        crossTabRefreshInProgress = true;
+        loadInitialData();
+      }
+    }
+
+    function initCrossTabSync() {
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          crossTabChannel = new BroadcastChannel(CROSS_TAB_CHANNEL_NAME);
+          crossTabChannel.addEventListener('message', event => handleCrossTabMessage(event.data));
+        } catch (error) {
+          crossTabChannel = null;
+          console.warn('KeepFlow BroadcastChannel tidak tersedia:', error);
+        }
+      }
+      window.addEventListener('storage', event => {
+        if (event.key !== CROSS_TAB_SIGNAL_KEY || !event.newValue) return;
+        try { handleCrossTabMessage(JSON.parse(event.newValue)); } catch { /* ignore malformed signal */ }
+      });
+    }
+
+    const SYNC_LEASE_KEY = 'hadi_keepflow_sync_lease_v1';
+    const SYNC_LEASE_TTL_MS = 60000;
+    let syncLeaseHeartbeat = null;
+    let syncLeaseOwned = false;
+
+    function readSyncLease() {
+      try {
+        const value = JSON.parse(localStorage.getItem(SYNC_LEASE_KEY) || 'null');
+        return value && typeof value === 'object' ? value : null;
+      } catch { return null; }
+    }
+
+    function claimSyncLease() {
+      const now = Date.now();
+      const current = readSyncLease();
+      if (current && current.owner !== CROSS_TAB_TAB_ID && Number(current.expiresAt) > now) return false;
+      const lease = { owner: CROSS_TAB_TAB_ID, expiresAt: now + SYNC_LEASE_TTL_MS };
+      try {
+        localStorage.setItem(SYNC_LEASE_KEY, JSON.stringify(lease));
+        const verified = readSyncLease();
+        syncLeaseOwned = Boolean(verified && verified.owner === CROSS_TAB_TAB_ID);
+      } catch (error) {
+        console.error('KeepFlow sync lease gagal:', error);
+        syncLeaseOwned = false;
+      }
+      if (!syncLeaseOwned) return false;
+      if (syncLeaseHeartbeat) clearInterval(syncLeaseHeartbeat);
+      syncLeaseHeartbeat = setInterval(() => {
+        const active = readSyncLease();
+        if (!active || active.owner !== CROSS_TAB_TAB_ID) {
+          releaseSyncLease(false);
+          return;
+        }
+        try {
+          localStorage.setItem(SYNC_LEASE_KEY, JSON.stringify({
+            owner: CROSS_TAB_TAB_ID,
+            expiresAt: Date.now() + SYNC_LEASE_TTL_MS
+          }));
+        } catch (error) { console.warn('KeepFlow sync lease heartbeat gagal:', error); }
+      }, 15000);
+      return true;
+    }
+
+    function releaseSyncLease(announce = true) {
+      if (syncLeaseHeartbeat) clearInterval(syncLeaseHeartbeat);
+      syncLeaseHeartbeat = null;
+      if (!syncLeaseOwned) return;
+      const current = readSyncLease();
+      if (current && current.owner === CROSS_TAB_TAB_ID) {
+        try { localStorage.removeItem(SYNC_LEASE_KEY); } catch { /* lease expires naturally */ }
+      }
+      syncLeaseOwned = false;
+      if (announce) publishCrossTabMessage('sync-unlocked');
     }
 
     const QUEUE_KEY = 'hadi_keepflow_pending_v1';
@@ -934,15 +1079,17 @@
     // If the cache lost a note that still has an unsynced save in the queue,
     // restore it from the queue so it stays visible before the next sync.
     function repairNotesFromQueue() {
-      const known = new Set(notes.map(note => String(note.id)));
+      const positions = new Map(notes.map((note, index) => [String(note.id), index]));
       pendingOperations.forEach(op => {
-        if (!op || op.type !== 'save' || !op.note || typeof op.note !== 'object' || known.has(String(op.id))) return;
-        notes.push(normalizeNoteRecord({ ...cloneData(op.note), id: op.id }));
-        known.add(String(op.id));
+        if (!op || op.type !== 'save' || !op.note || typeof op.note !== 'object') return;
+        const id = String(op.id);
+        const queuedNote = normalizeNoteRecord({ ...cloneData(op.note), id });
+        if (positions.has(id)) notes[positions.get(id)] = queuedNote;
+        else { positions.set(id, notes.length); notes.push(queuedNote); }
       });
     }
 
-    function persistLocal() {
+    function persistLocal(announceCrossTab = true) {
       let queueSaved = false;
       try {
         // Persist the queue first: it is the recovery log for cloud operations.
@@ -956,6 +1103,7 @@
       updateQueueIndicator();
       // The notes cache is best effort: the queue above is the recovery log.
       NotesCache.save();
+      if (queueSaved && announceCrossTab) publishCrossTabMessage('state-changed');
       return queueSaved;
     }
 
@@ -1230,6 +1378,18 @@
       }
       clearRetryTimer();
       showManualRetry(false);
+      if (!claimSyncLease()) {
+        setSyncStatus('Sinkronisasi sedang dijalankan di tab lain...', 'fa-clock', 'text-blue-500');
+        if (!crossTabWakeTimer) {
+          crossTabWakeTimer = setTimeout(() => {
+            crossTabWakeTimer = null;
+            readQueue();
+            if (pendingOperations.length && !syncRunning) flushPendingOperations();
+          }, 2000);
+        }
+        return;
+      }
+
       const queuedHead = pendingOperations[0];
       const operation = cloneData(queuedHead);
       syncRunning = true;
@@ -1241,7 +1401,10 @@
           if (response && response.status === 'conflict') {
             syncRunning = false;
             inFlightOperationId = null;
-            resolveSyncConflict(operation, response).finally(() => flushPendingOperations());
+            resolveSyncConflict(operation, response).finally(() => {
+              releaseSyncLease();
+              flushPendingOperations();
+            });
             return;
           }
 
@@ -1250,6 +1413,7 @@
           if (!response || response.status !== 'success' || !validSaveResponse) {
             syncRunning = false;
             inFlightOperationId = null;
+            releaseSyncLease();
             recordOperationFailure(operation, 'Respons server tidak valid atau operasi gagal.');
             if (refreshRequested) {
               refreshRequested = false;
@@ -1274,6 +1438,7 @@
 
           syncRunning = false;
           inFlightOperationId = null;
+          releaseSyncLease();
           render();
           if (refreshRequested) {
             refreshRequested = false;
@@ -1285,6 +1450,7 @@
         .withFailureHandler(error => {
           syncRunning = false;
           inFlightOperationId = null;
+          releaseSyncLease();
           recordOperationFailure(operation, error);
           console.error('KeepFlow sync error:', error);
           if (refreshRequested) {
@@ -1293,8 +1459,15 @@
           }
         });
 
-      if (operation.type === 'delete') runner.deleteNote(operation.id, operation.expectedUpdatedAt, operation.opId);
-      else runner.saveNote(operation.note, operation.opId);
+      try {
+        if (operation.type === 'delete') runner.deleteNote(operation.id, operation.expectedUpdatedAt, operation.opId);
+        else runner.saveNote(operation.note, operation.opId);
+      } catch (error) {
+        syncRunning = false;
+        inFlightOperationId = null;
+        releaseSyncLease();
+        recordOperationFailure(operation, error);
+      }
     }
 
     // ---------------------------------------------------------------------
@@ -1385,6 +1558,7 @@
 
       if (!navigator.onLine || typeof google === 'undefined' || !google.script || !google.script.run) {
         serverReady = false;
+        crossTabRefreshInProgress = false;
         setSyncStatus('Mode lokal - menunggu koneksi', 'fa-database', 'text-blue-500');
         return;
       }
@@ -1400,7 +1574,8 @@
 
         if (!Array.isArray(serverData)) {
           serverReady = wasServerReady;
-          setSyncStatus('Respons server tidak valid - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
+          crossTabRefreshInProgress = false;
+        setSyncStatus('Respons server tidak valid - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
           if (refreshRequested) {
             refreshRequested = false;
             loadInitialData();
@@ -1428,7 +1603,8 @@
         // Do not treat the server response as a user edit. Pending operations
         // remain the authoritative record of local changes until acknowledged.
         lastObservedNotes = cloneData(notes);
-        persistLocal();
+        persistLocal(!crossTabRefreshInProgress);
+        crossTabRefreshInProgress = false;
         render();
         refreshCloudCategories();
 
@@ -1444,6 +1620,7 @@
         cloudLoadInProgress = false;
         serverReady = wasServerReady;
         console.error('KeepFlow load error:', error);
+        crossTabRefreshInProgress = false;
         setSyncStatus('Gagal memuat cloud - data lokal dipertahankan', 'fa-triangle-exclamation', 'text-amber-500');
         if (refreshRequested) {
           refreshRequested = false;
@@ -1896,6 +2073,7 @@
               currentTag = null;
             }
 
+            publishCrossTabMessage('state-changed');
             loadInitialData();
             notify('Kategori berhasil dihapus. Tidak ada catatan yang dipindahkan atau dihapus.');
             setSyncStatus('Kategori kosong berhasil dihapus', 'fa-check', 'text-green-500');
@@ -2929,6 +3107,14 @@
       editorReturnFocus = null;
       if (returnTarget && typeof returnTarget.focus === 'function' && document.contains(returnTarget)) {
         returnTarget.focus({ preventScroll: true });
+      }
+      if (crossTabRefreshPending) {
+        crossTabRefreshPending = false;
+        setTimeout(() => {
+          readQueue();
+          repairNotesFromQueue();
+          loadInitialData();
+        }, 0);
       }
     }
 
@@ -4223,6 +4409,8 @@
       // Queue and note snapshots are persisted continuously; resume safely.
       if (pendingOperations.length && navigator.onLine) loadInitialData();
     });
+
+    initCrossTabSync();
 
     document.addEventListener('DOMContentLoaded', () => {
       loadUserPreferences();
