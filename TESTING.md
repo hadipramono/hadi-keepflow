@@ -82,6 +82,21 @@ Buka DevTools > Application > IndexedDB > `hadi_keepflow` (desktop), atau uji pe
 - [ ] Dua sesi mengedit catatan yang sama memunculkan penanganan konflik, bukan menimpa diam-diam.
 - [ ] Draft lokal yang belum disimpan dapat dipulihkan setelah tab ditutup.
 
+## 5b. Dialog internal (menggantikan confirm/prompt)
+- [ ] Hapus kategori kosong: dialog internal tampil; Batal tidak menghapus kategori; konfirmasi menghapus kategori.
+- [ ] Ubah nama dan buat kategori: input dialog menerima teks, membatasi panjang, dan membatalkan tanpa perubahan.
+- [ ] Tambah tautan: dialog URL menerima `https://`, `http://`, dan `mailto:`; URL tidak valid ditolak.
+- [ ] Tambah/hapus tag massal: input koma bekerja; Batal tidak mengubah catatan.
+- [ ] Terapkan template pada catatan berisi: Batal mempertahankan isi; konfirmasi mengganti isi.
+- [ ] Hapus/reset template: dialog menampilkan tindakan yang tepat; Batal tidak mengubah template.
+- [ ] Restore ZIP: ringkasan preview terbaca; Batal menghentikan restore sebelum penulisan.
+- [ ] Pulihkan draft: pilihan Pulihkan mengisi editor; Buang menghapus draft.
+- [ ] Konflik sinkronisasi: pilihan lokal/cloud diproses sebelum antrean sinkronisasi berjalan kembali.
+- [ ] Tutup editor dengan perubahan belum disimpan: Batal tetap di editor; Buang perubahan menutup editor.
+- [ ] Hapus catatan: Batal mempertahankan catatan; konfirmasi menjalankan penghapusan.
+- [ ] Keyboard: Tab/Shift+Tab tetap di dialog, Enter mengonfirmasi, Escape membatalkan, dan fokus kembali ke pemicu.
+- [ ] Uji tema terang/gelap, viewport desktop/mobile, serta screen reader.
+
 ## 6. Aksesibilitas
 - [ ] Tab dan Shift+Tab tetap berada di dalam editor modal.
 - [ ] Escape menutup menu tindakan lebih dulu, lalu alur tutup editor.

@@ -2,6 +2,22 @@
 
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/). Semua rilis di bawah ini masih berstatus **kandidat** sampai checklist [`TESTING.md`](TESTING.md) selesai dijalankan pada perangkat nyata.
 
+## Perubahan berikutnya — Dialog internal (belum dirilis)
+
+### UI/UX dan aksesibilitas
+- Mengganti seluruh 10 `confirm()` dan 5 `prompt()` native dengan dialog internal KeepFlow.
+- Dialog mendukung konfirmasi dan input teks, label tombol kontekstual, tema terang/gelap, layout mobile, tombol Escape, pembatalan backdrop, focus trap, serta pengembalian fokus.
+- Permintaan dialog diserialisasi agar dialog yang muncul bersamaan tidak saling menimpa.
+- Alur konflik sinkronisasi menunggu pilihan pengguna sebelum antrean operasi dilanjutkan.
+- Menambahkan empat pemeriksaan kontrak statis untuk memastikan tidak ada pemanggilan native dan struktur dialog tetap tersedia.
+
+### Verifikasi
+- Pemeriksaan sintaks JavaScript frontend: lulus.
+- 4 tes dialog baru: lulus.
+- Seluruh tes selain `notes-cache.test.js`: 76/76 lulus.
+- `npm test` penuh belum lulus di lingkungan ini karena `fake-indexeddb` tidak tersedia dan `npm ci` tidak selesai sebelum batas waktu. Jalankan kembali di CI dengan `npm ci`.
+- Pengujian interaksi visual, keyboard, screen reader, dan perangkat mobile nyata belum dilakukan.
+
 ## v1.3.8 — 2026-11-08 (kandidat)
 
 ### Keamanan

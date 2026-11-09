@@ -43,6 +43,26 @@
   <!-- Global Loading Overlay -->
   <div id="toast-region" class="kf-toast-region" aria-live="polite" aria-atomic="false"></div>
 
+  <!-- Accessible in-app confirmation and text-entry dialog -->
+  <div id="app-dialog" class="kf-dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="app-dialog-title" aria-describedby="app-dialog-message" tabindex="-1">
+    <section class="kf-dialog-panel" role="document">
+      <header class="kf-dialog-header">
+        <h2 id="app-dialog-title" class="text-base font-semibold text-gray-900 dark:text-white">Konfirmasi</h2>
+      </header>
+      <div class="kf-dialog-body">
+        <p id="app-dialog-message" class="kf-dialog-message text-sm text-gray-600 dark:text-gray-300"></p>
+        <label id="app-dialog-input-wrap" class="hidden mt-4 block">
+          <span class="sr-only">Nilai</span>
+          <input id="app-dialog-input" type="text" class="kf-dialog-input" autocomplete="off">
+        </label>
+      </div>
+      <footer class="kf-dialog-footer">
+        <button id="app-dialog-cancel" type="button" class="kf-dialog-button kf-dialog-secondary">Batal</button>
+        <button id="app-dialog-accept" type="button" class="kf-dialog-button kf-dialog-primary">Ya, lanjutkan</button>
+      </footer>
+    </section>
+  </div>
+
   <div id="global-loader" role="status" aria-live="polite" class="fixed inset-0 z-50 bg-gray-900/60 backdrop-blur-sm flex flex-col items-center justify-center text-white transition-opacity duration-300">
     <div class="bg-white dark:bg-gray-800 px-6 py-4 rounded-2xl shadow-xl flex items-center space-x-4 border border-gray-200 dark:border-gray-700">
       <i class="fa-solid fa-circle-notch fa-spin text-blue-500 text-2xl"></i>

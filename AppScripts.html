@@ -38,6 +38,92 @@
     const CATEGORY_STATE_KEY = 'hadi_keepflow_categories_v1';
     const DEFAULT_CATEGORIES = [];
     let categories = [...DEFAULT_CATEGORIES];
+
+    // Accessible in-app dialog service. All confirm/prompt interactions are
+    // serialized so two async actions cannot overwrite the same dialog UI.
+    let appDialogQueue = Promise.resolve();
+    function showAppDialog(options = {}) {
+      const task = appDialogQueue.then(() => new Promise(resolve => {
+        const modal = document.getElementById('app-dialog');
+        if (!modal) { resolve(options.mode === 'prompt' ? null : false); return; }
+        const title = modal.querySelector('#app-dialog-title');
+        const message = modal.querySelector('#app-dialog-message');
+        const inputWrap = modal.querySelector('#app-dialog-input-wrap');
+        const input = modal.querySelector('#app-dialog-input');
+        const cancel = modal.querySelector('#app-dialog-cancel');
+        const accept = modal.querySelector('#app-dialog-accept');
+        const previousFocus = document.activeElement;
+        const mode = options.mode === 'prompt' ? 'prompt' : 'confirm';
+        let settled = false;
+        title.textContent = options.title || (mode === 'prompt' ? 'Masukkan nilai' : 'Konfirmasi');
+        message.textContent = String(options.message || '');
+        inputWrap.classList.toggle('hidden', mode !== 'prompt');
+        input.value = mode === 'prompt' ? String(options.defaultValue ?? '') : '';
+        input.placeholder = options.placeholder || '';
+        input.maxLength = Number.isInteger(options.maxLength) ? options.maxLength : 500;
+        input.required = Boolean(options.required);
+        cancel.textContent = options.cancelText || 'Batal';
+        accept.textContent = options.confirmText || (mode === 'prompt' ? 'Simpan' : 'Ya, lanjutkan');
+        accept.classList.toggle('kf-dialog-danger', options.variant === 'danger');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        modal.setAttribute('aria-label', title.textContent);
+
+        const finish = value => {
+          if (settled) return;
+          settled = true;
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+          modal.removeEventListener('click', onBackdrop);
+          modal.removeEventListener('keydown', onKeydown);
+          cancel.removeEventListener('click', onCancel);
+          accept.removeEventListener('click', onAccept);
+          if (previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') {
+            previousFocus.focus({ preventScroll: true });
+          }
+          resolve(value);
+        };
+        const onCancel = () => finish(mode === 'prompt' ? null : false);
+        const onAccept = () => {
+          if (mode === 'prompt') {
+            const value = input.value;
+            if (input.required && !value.trim()) { input.focus(); return; }
+            finish(value);
+          } else finish(true);
+        };
+        const onBackdrop = event => { if (event.target === modal) onCancel(); };
+        const onKeydown = event => {
+          if (event.key === 'Escape') { event.preventDefault(); onCancel(); return; }
+          if (event.key === 'Enter' && (event.target === input || event.target === accept)) {
+            event.preventDefault(); onAccept(); return;
+          }
+          if (event.key !== 'Tab') return;
+          const focusable = [...(mode === 'prompt' ? [input] : []), cancel, accept]
+            .filter(el => !el.disabled && el.getClientRects().length);
+          if (!focusable.length) { event.preventDefault(); return; }
+          const first = focusable[0], last = focusable[focusable.length - 1];
+          if (event.shiftKey && (document.activeElement === first || !modal.contains(document.activeElement))) {
+            event.preventDefault(); last.focus();
+          } else if (!event.shiftKey && (document.activeElement === last || !modal.contains(document.activeElement))) {
+            event.preventDefault(); first.focus();
+          }
+        };
+        cancel.addEventListener('click', onCancel);
+        accept.addEventListener('click', onAccept);
+        modal.addEventListener('click', onBackdrop);
+        modal.addEventListener('keydown', onKeydown);
+        window.requestAnimationFrame(() => (mode === 'prompt' ? input : accept).focus({ preventScroll: true }));
+      }));
+      appDialogQueue = task.then(() => undefined, () => undefined);
+      return task;
+    }
+    function appConfirm(message, options = {}) {
+      return showAppDialog({ ...options, mode: 'confirm', message });
+    }
+    function appPrompt(message, defaultValue = '', options = {}) {
+      return showAppDialog({ ...options, mode: 'prompt', message, defaultValue });
+    }
+
     let pendingCategoryCreates = [];
 
     function normalizeNoteCategory(value) {
@@ -286,12 +372,12 @@
       }
     }
 
-    function insertEditorLink() {
+    async function insertEditorLink() {
       const editor = document.getElementById('editor-content-editable');
       if (!editor) return;
       const selection = window.getSelection();
       const savedRange = selection && selection.rangeCount ? selection.getRangeAt(0).cloneRange() : null;
-      const rawUrl = prompt('Masukkan URL tautan (https://, http://, atau mailto:):');
+      const rawUrl = await appPrompt('Masukkan URL tautan (https://, http://, atau mailto:):', '', { title: 'Tambahkan tautan', placeholder: 'https://example.com', maxLength: 2048 });
       if (!rawUrl) { editor.focus(); return; }
       let safeUrl;
       try {
@@ -442,8 +528,8 @@
       setEditorPanelMode('');
       restoreEditorSelection(document.getElementById('editor-content-editable'));
     });
-    document.getElementById('editor-template-select').addEventListener('change', event => {
-      applyProductivityTemplate(event.target.value);
+    document.getElementById('editor-template-select').addEventListener('change', async event => {
+      await applyProductivityTemplate(event.target.value);
       setEditorPanelMode('');
       restoreEditorSelection(document.getElementById('editor-content-editable'));
     });
@@ -1036,7 +1122,7 @@
       render();
     }
 
-    function resolveSyncConflict(operation, response) {
+    async function resolveSyncConflict(operation, response) {
       const currentNote = response.currentNote ? normalizeNoteRecord(response.currentNote) : null;
       const id = String(operation.id);
       const message = currentNote
@@ -1048,7 +1134,7 @@
             'OK: simpan salinan lokal sebagai catatan baru.\n' +
             'Cancel: buang perubahan lokal tertunda.'
           : 'Catatan sudah tidak ditemukan di Google Drive. Penghapusan dianggap selesai.';
-      const keepLocal = confirm(message);
+      const keepLocal = await appConfirm(message, { title: 'Selesaikan konflik sinkronisasi', confirmText: 'Pertahankan versi lokal', cancelText: 'Gunakan versi cloud' });
 
       if (keepLocal) {
         if (currentNote) {
@@ -1155,8 +1241,7 @@
           if (response && response.status === 'conflict') {
             syncRunning = false;
             inFlightOperationId = null;
-            resolveSyncConflict(operation, response);
-            flushPendingOperations();
+            resolveSyncConflict(operation, response).finally(() => flushPendingOperations());
             return;
           }
 
@@ -1768,7 +1853,7 @@
       openEditor(String(card.dataset.id || ''));
     }));
 
-    categoriesList.addEventListener('click', (event) => {
+    categoriesList.addEventListener('click', async (event) => {
       const deleteButton = event.target.closest('.delete-category-btn');
       if (deleteButton) {
         event.preventDefault();
@@ -1788,9 +1873,10 @@
           return;
         }
 
-        const confirmed = confirm(
+        const confirmed = await appConfirm(
           'Hapus kategori "' + category + '"?\n\n' +
-          'Kategori ini kosong. Tidak ada catatan yang akan dipindahkan atau dihapus.'
+          'Kategori ini kosong. Tidak ada catatan yang akan dipindahkan atau dihapus.',
+          { title: 'Hapus kategori', confirmText: 'Hapus kategori', variant: 'danger' }
         );
         if (!confirmed) return;
 
@@ -1830,7 +1916,7 @@
         const oldCat = editButton.dataset.oldCategory;
         if (!oldCat || oldCat.toLocaleLowerCase() === 'umum') return;
 
-        const newCat = prompt('Ubah nama kategori "' + oldCat + '" menjadi:', oldCat);
+        const newCat = await appPrompt('Ubah nama kategori "' + oldCat + '" menjadi:', oldCat, { title: 'Ubah nama kategori', placeholder: 'Nama kategori', maxLength: 120, required: true });
         if (newCat == null) return;
         const formattedNewCat = newCat.replace(/[\/\\?%*:|"<>]/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120);
         if (!formattedNewCat) {
@@ -2649,7 +2735,7 @@
       if (getProductivityTemplates()[previous]) select.value = previous;
     }
 
-    function applyProductivityTemplate(templateKey) {
+    async function applyProductivityTemplate(templateKey) {
       const select = document.getElementById('editor-template-select');
       const editor = document.getElementById('editor-content-editable');
       const titleInput = document.getElementById('modal-title-input');
@@ -2657,7 +2743,7 @@
       const template = getProductivityTemplates()[templateKey];
       if (!template) { select.value = ''; return; }
       const hasContent = Boolean(editor.textContent.trim() || editor.querySelector('img, input, hr'));
-      if (hasContent && !confirm('Gunakan template ini dan mengganti isi catatan saat ini?')) {
+      if (hasContent && !(await appConfirm('Gunakan template ini dan mengganti isi catatan saat ini?', { title: 'Ganti isi catatan?', confirmText: 'Gunakan template' }))) {
         select.value = '';
         return;
       }
@@ -2748,19 +2834,19 @@
       notify('Template berhasil disimpan di browser ini.');
     }
 
-    function deleteTemplateFromManager() {
+    async function deleteTemplateFromManager() {
       if (!editingTemplateKey) return;
       const templates = getProductivityTemplates();
       const template = templates[editingTemplateKey];
-      if (!template || !confirm('Hapus template "' + template.name + '"? Catatan yang sudah dibuat tidak akan berubah.')) return;
+      if (!template || !(await appConfirm('Hapus template "' + template.name + '"? Catatan yang sudah dibuat tidak akan berubah.', { title: 'Hapus template', confirmText: 'Hapus template', variant: 'danger' }))) return;
       delete templates[editingTemplateKey];
       saveProductivityTemplates(templates);
       clearTemplateManagerForm();
       refreshTemplateManagerList();
     }
 
-    function resetProductivityTemplates() {
-      if (!confirm('Pulihkan empat template bawaan? Template kustom yang tersimpan akan diganti.')) return;
+    async function resetProductivityTemplates() {
+      if (!(await appConfirm('Pulihkan empat template bawaan? Template kustom yang tersimpan akan diganti.', { title: 'Pulihkan template', confirmText: 'Pulihkan bawaan', variant: 'danger' }))) return;
       const defaults = getDefaultProductivityTemplates();
       saveProductivityTemplates(defaults);
       refreshTemplateManagerList();
@@ -2852,7 +2938,7 @@
       )).filter(element => element.getClientRects().length > 0 && element.getAttribute('aria-hidden') !== 'true');
     }
 
-    function openEditor(noteId = null) {
+    async function openEditor(noteId = null) {
       editorReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       activeNoteId = noteId;
       savedEditorRange = null;
@@ -2899,7 +2985,7 @@
         const prompt = draftIsStale
           ? 'Ada draft lokal dari versi catatan yang lebih lama. Pulihkan draft ini? Perubahan cloud yang lebih baru tidak akan dihapus sampai Anda menekan Simpan.'
           : 'Ditemukan draft lokal yang belum disimpan. Pulihkan draft?';
-        if (confirm(prompt)) {
+        if (await appConfirm(prompt, { title: 'Pulihkan draft lokal', confirmText: 'Pulihkan draft', cancelText: 'Buang draft' })) {
           modalTitle.value = String(draft.title || '');
           modalContentEditable.innerHTML = sanitizeEditorHTML(draft.content || '');
           modalCategorySelect.value = normalizeNoteCategory(draft.category);
@@ -3533,7 +3619,7 @@
         ].join('\n');
         updateDataProgress('Preview siap', preview.notes.length + ' catatan baru siap dipulihkan.', 36, false);
         await yieldToBrowser();
-        if (!confirm(summary)) {
+        if (!(await appConfirm(summary, { title: 'Konfirmasi restore / import', confirmText: 'Lanjutkan restore' }))) {
           setSyncStatus('Restore dibatalkan', 'fa-cloud', 'text-gray-400');
           hideDataProgress();
           return;
@@ -3655,9 +3741,9 @@
       render();
     });
 
-    document.getElementById('add-category-btn').addEventListener('click', (e) => {
+    document.getElementById('add-category-btn').addEventListener('click', async (e) => {
       e.stopPropagation();
-      const newCat = prompt('Masukkan nama kategori baru:');
+      const newCat = await appPrompt('Masukkan nama kategori baru:', '', { title: 'Kategori baru', placeholder: 'Nama kategori', maxLength: 120, required: true });
       if (newCat && newCat.trim()) addCategory(newCat);
     });
 
@@ -3685,8 +3771,8 @@
       if (count) setSyncStatus(count + ' catatan dipindahkan ke ' + (category || 'Inbox'), category ? 'fa-folder' : 'fa-inbox', 'text-green-500');
     });
 
-    document.getElementById('bulk-add-tags').addEventListener('click', () => {
-      const raw = prompt('Masukkan tag yang akan ditambahkan (pisahkan dengan koma):');
+    document.getElementById('bulk-add-tags').addEventListener('click', async () => {
+      const raw = await appPrompt('Masukkan tag yang akan ditambahkan (pisahkan dengan koma):', '', { title: 'Tambah tag', placeholder: 'Contoh: studi, proyek', maxLength: 1000 });
       if (!raw || !raw.trim()) return;
       const additions = normalizeTags(raw);
       if (!additions.length) return;
@@ -3701,8 +3787,8 @@
       if (count) setSyncStatus('Tag ditambahkan ke ' + count + ' catatan', 'fa-tags', 'text-green-500');
     });
 
-    document.getElementById('bulk-remove-tags').addEventListener('click', () => {
-      const raw = prompt('Masukkan tag yang akan dihapus (pisahkan dengan koma):');
+    document.getElementById('bulk-remove-tags').addEventListener('click', async () => {
+      const raw = await appPrompt('Masukkan tag yang akan dihapus (pisahkan dengan koma):', '', { title: 'Hapus tag', placeholder: 'Contoh: studi, proyek', maxLength: 1000 });
       if (!raw || !raw.trim()) return;
       const removals = new Set(normalizeTags(raw).map(tag => tag.toLocaleLowerCase()));
       const count = applyBulkNoteUpdate(note => ({
@@ -3727,7 +3813,7 @@
     });
 
     document.getElementById('quick-add-trigger').addEventListener('click', () => openEditor(null));
-    document.getElementById('modal-close-btn').addEventListener('click', () => {
+    document.getElementById('modal-close-btn').addEventListener('click', async () => {
       const title = document.getElementById('modal-title-input').value.trim();
       const content = document.getElementById('editor-content-editable').innerHTML.trim();
       const current = hasActiveNoteId() ? notes.find(n => String(n.id) === String(activeNoteId)) : null;
@@ -3736,7 +3822,7 @@
             document.getElementById('modal-tags-input').value !== (current.tags || []).join(', ') ||
             normalizeNoteCategory(modalCategorySelect.value) !== normalizeNoteCategory(current.category))
         : Boolean(title || content);
-      if (changed && !confirm('Perubahan belum disimpan. Tutup editor dan buang perubahan?')) return;
+      if (changed && !(await appConfirm('Perubahan belum disimpan. Tutup editor dan buang perubahan?', { title: 'Buang perubahan?', confirmText: 'Buang perubahan', variant: 'danger' }))) return;
       if (changed) clearEditorDraft();
       else clearEditorDraft();
       closeEditorModal();
@@ -3863,9 +3949,9 @@
       }
     });
 
-    document.getElementById('modal-delete-btn').addEventListener('click', () => {
+    document.getElementById('modal-delete-btn').addEventListener('click', async () => {
       if (hasActiveNoteId()) {
-        if (confirm('Apakah Anda yakin ingin menghapus catatan ini secara permanen dari perangkat dan Google Drive?')) {
+        if (await appConfirm('Apakah Anda yakin ingin menghapus catatan ini secara permanen dari perangkat dan Google Drive?', { title: 'Hapus catatan permanen?', confirmText: 'Hapus permanen', variant: 'danger' })) {
           const noteId = String(activeNoteId);
           notes = notes.filter(note => String(note.id) !== noteId);
           clearEditorDraft();
@@ -3894,7 +3980,7 @@
         const message = hasDraftContent
           ? 'Buang catatan baru dan draft lokal ini? Tindakan ini tidak dapat dibatalkan.'
           : 'Tutup editor catatan baru?';
-        if (!confirm(message)) return;
+        if (!(await appConfirm(message, { title: 'Buang catatan baru?', confirmText: 'Buang catatan', variant: 'danger' }))) return;
         clearEditorDraft();
         closeEditorModal();
         editorModal.classList.remove('editor-content-active', 'editor-formatting-mode');

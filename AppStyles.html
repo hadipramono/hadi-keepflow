@@ -337,6 +337,42 @@
     .dark .kf-toast { background: #f3f4f6; color: #111827; }
     .dark .kf-toast-close:hover { background: rgba(0, 0, 0, .1); }
 
+    /* In-app dialogs replace blocking browser confirm()/prompt(). */
+    .kf-dialog-overlay {
+      position: fixed; inset: 0; z-index: 11000; align-items: center; justify-content: center;
+      padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+      background: rgba(17, 24, 39, .58); backdrop-filter: blur(3px);
+    }
+    .kf-dialog-overlay.hidden { display: none !important; }
+    .kf-dialog-panel {
+      width: min(100%, 26rem); max-height: min(86dvh, 40rem); overflow-y: auto;
+      border: 1px solid rgba(148, 163, 184, .28); border-radius: 1rem;
+      background: #fff; color: #111827; box-shadow: 0 24px 70px rgba(0, 0, 0, .28);
+    }
+    .dark .kf-dialog-panel { background: #1f2937; color: #f9fafb; border-color: #374151; }
+    .kf-dialog-header { padding: 1.15rem 1.25rem .25rem; }
+    .kf-dialog-body { padding: .75rem 1.25rem 1.25rem; }
+    .kf-dialog-message { white-space: pre-line; }
+    .kf-dialog-input {
+      display: block; width: 100%; min-height: 2.8rem; border-radius: .7rem;
+      border: 1px solid #cbd5e1; background: #fff; color: #111827; padding: .65rem .8rem;
+      font: inherit; font-size: 16px;
+    }
+    .dark .kf-dialog-input { border-color: #4b5563; background: #111827; color: #f9fafb; }
+    .kf-dialog-input:focus-visible, .kf-dialog-button:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+    .kf-dialog-footer { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: .6rem; padding: 0 1.25rem 1.25rem; }
+    .kf-dialog-button { min-height: 2.75rem; padding: .65rem 1rem; border-radius: .7rem; font-size: .875rem; font-weight: 600; touch-action: manipulation; }
+    .kf-dialog-secondary { color: #374151; background: #f3f4f6; }
+    .dark .kf-dialog-secondary { color: #e5e7eb; background: #374151; }
+    .kf-dialog-primary { color: #fff; background: #2563eb; }
+    .kf-dialog-primary:hover { background: #1d4ed8; }
+    .kf-dialog-primary.kf-dialog-danger { background: #dc2626; }
+    .kf-dialog-primary.kf-dialog-danger:hover { background: #b91c1c; }
+    @media (max-width: 480px) {
+      .kf-dialog-footer { display: grid; grid-template-columns: 1fr 1fr; }
+      .kf-dialog-button { width: 100%; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       #sidebar, .sidebar-backdrop { transition-duration: 0.01ms !important; }
     }

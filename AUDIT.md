@@ -42,13 +42,19 @@ Tanggal: 2026-11-08. Cakupan: keamanan, kode, cara dan format penyimpanan, keand
 | O2 | Antrean operasi dan draf editor masih di `localStorage` (±5 MB bersama preferensi). Satu catatan antre sangat besar bisa tetap membentur batas itu. | Pindahkan antrean ke IndexedDB dengan jaminan durabilitas yang setara (butuh desain tersendiri; lihat catatan di bawah). |
 | O11 | Banyak tab: tab kedua tidak mengetahui perubahan tab pertama sampai muat ulang dari cloud (sebelumnya pun tidak ada sinkronisasi antar-tab yang benar). | `BroadcastChannel` atau kunci Web Locks. |
 | O3 | `document.execCommand` sudah deprecated. | Ganti dengan Selection/Range API atau pustaka editor. |
-| O4 | 10 `confirm()` dan 5 `prompt()` masih native. | Dialog di dalam aplikasi (butuh refaktor alur async). |
+| O4 | 10 `confirm()` dan 5 `prompt()` masih native. | **Diperbaiki**: seluruh 15 titik diganti dialog internal asinkron; konfirmasi dan input memakai komponen modal yang sama, focus trap, Escape, backdrop cancel, dan antrean dialog. |
 | O5 | Isi catatan adalah HTML di file `.md`. | Konversi ke Markdown murni. Butuh pembuat/pembaca Markdown dan uji bolak-balik; field `content_type: html` sudah disiapkan untuk migrasi. |
 | O6 | Tailwind Play CDN, Font Awesome, dan JSZip dimuat dari CDN tanpa SRI; Tailwind Play CDN tidak ditujukan untuk produksi. | Bundel lokal atau tambahkan SRI. |
 | O7 | Scope OAuth `drive` penuh (tidak bisa dipersempit selama memakai `DriveApp`). | Batasan platform; didokumentasikan di `SECURITY.md`. |
 | O8 | Tidak ada backup otomatis (hanya ZIP manual). | Time-driven trigger yang menulis ZIP ke folder Drive terpisah. |
 | O9 | Tes browser (Playwright) belum masuk repo/CI; hanya tes Node. | Tambahkan setelah ada keputusan soal dependensi dev. |
 | O10 | Restore melewati catatan berjudul sama tetapi isi berbeda. | Impor sebagai salinan ("(impor)") bila pengguna setuju. |
+
+### Dialog internal (O4)
+
+Seluruh 15 pemanggilan native `confirm()`/`prompt()` pada frontend diganti dengan `appConfirm()` dan `appPrompt()`. Komponen dialog memakai satu modal internal, menampilkan teks melalui `textContent`, mendukung input teks, tombol kontekstual, pembatalan melalui Escape/backdrop, pengembalian fokus, focus trap, serta antrean agar beberapa permintaan async tidak saling menimpa. Alur konflik sinkronisasi menunggu keputusan dialog sebelum melanjutkan antrean operasi.
+
+Verifikasi statis memastikan tidak ada lagi pemanggilan native `confirm()`/`prompt()` di `AppScripts.html`. Pengujian interaksi visual dan screen reader tetap perlu dilakukan di browser nyata.
 
 ## Performa: indeks catatan (P1)
 
