@@ -2724,8 +2724,8 @@
             ${selectionMode ? `<input type="checkbox" data-note-id="${safeId}" class="note-select-checkbox h-4 w-4 shrink-0 accent-blue-600" aria-label="Pilih catatan ${escapeHTML(note.title || 'Tanpa Judul')}">` : ''}
             <div class="card-list-main flex items-center space-x-3 truncate flex-1 min-w-0">
               <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px] font-medium shrink-0"><i class="fa-solid ${isInboxNote(note) ? 'fa-inbox' : 'fa-folder'} mr-1"></i>${escapeHTML(getCategoryDisplayName(note.category))}</span>
-              <span class="font-bold text-gray-900 dark:text-white text-sm min-w-0">${highlightSearchText(note.title || 'Tanpa Judul', searchQuery)}</span>
-              <span class="text-gray-500 dark:text-gray-400 text-xs truncate">- ${highlightSearchText(plainContent, searchQuery)}</span>
+              <span class="card-list-title font-bold text-gray-900 dark:text-white text-sm">${highlightSearchText(note.title || 'Tanpa Judul', searchQuery)}</span>
+              <span class="card-list-preview text-gray-500 dark:text-gray-400 text-xs">- ${highlightSearchText(plainContent, searchQuery)}</span>
             </div>
             
             <div class="card-list-meta flex items-center space-x-3 shrink-0 text-xs text-gray-400">

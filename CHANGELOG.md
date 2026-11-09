@@ -1,5 +1,18 @@
 # Changelog
 
+## Perbaikan berikutnya — List View text overlap (belum dirilis)
+
+### UI/UX
+- Memisahkan elemen judul dan preview catatan dengan kelas layout khusus.
+- Membatasi lebar judul dan menerapkan ellipsis agar judul panjang tidak menimpa preview.
+- Preview menggunakan sisa ruang yang tersedia dan dipotong dengan ellipsis.
+- Pada layar sempit, preview berpindah ke baris berikutnya agar metadata dan judul tetap terbaca.
+- Tidak mengubah isi, format, maupun mekanisme penyimpanan catatan.
+
+### Verifikasi
+- Menambahkan empat pemeriksaan kontrak layout List View.
+- Pengujian visual browser pada berbagai ukuran viewport masih perlu dilakukan.
+
 Format mengikuti [Keep a Changelog](https://keepachangelog.com/id-ID/1.1.0/). Semua rilis di bawah ini masih berstatus **kandidat** sampai checklist [`TESTING.md`](TESTING.md) selesai dijalankan pada perangkat nyata.
 
 ## Perubahan berikutnya — Sinkronisasi antar-tab (belum dirilis)

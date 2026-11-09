@@ -120,3 +120,12 @@ Buka DevTools > Application > IndexedDB > `hadi_keepflow` (desktop), atau uji pe
 ## 7. Keamanan deployment
 - [ ] Deployment diatur **Execute as: Me** dan **Only myself**.
 - [ ] Tidak ada catatan pribadi, backup, atau identifier Drive yang ikut ter-commit.
+
+
+### List View — judul dan preview
+- [ ] Judul pendek dan panjang tampil tanpa bertumpuk dengan preview.
+- [ ] Judul panjang dipotong dengan ellipsis.
+- [ ] Preview memakai ruang tersisa dan dipotong dengan ellipsis.
+- [ ] Pada viewport mobile, preview dapat pindah ke baris berikutnya.
+- [ ] Badge kategori, tanggal, tag, dan pin tetap terlihat.
+- [ ] Uji dengan selection mode aktif dan nonaktif.
