@@ -28,7 +28,7 @@ Rekomendasi deployment:
 Aplikasi memakai `DriveApp`, yang membutuhkan scope `https://www.googleapis.com/auth/drive` (akses penuh ke Google Drive akun pemilik). Scope yang lebih sempit tidak tersedia selama memakai `DriveApp`. `appsscript.json` hanya mendeklarasikan scope tersebut. Karena itu deployment tidak boleh dibuka untuk pihak lain.
 
 ## Dependency eksternal
-UI memuat Tailwind CSS, Font Awesome, dan JSZip dari CDN **tanpa Subresource Integrity (SRI)**. Kompromi pada CDN tersebut dapat memengaruhi aplikasi. Periksa dependency sebelum memperbarui versinya; lihat juga [`ROADMAP.md`](ROADMAP.md).
+UI memuat Tailwind CSS, Font Awesome, dan JSZip dari CDN **tanpa Subresource Integrity (SRI)**. JSZip 3.10.1 kini dimuat secara lazy hanya saat fitur Backup/Restore ZIP dipakai; ini mengurangi pemuatan awal, tetapi tidak menghilangkan risiko CDN saat fitur tersebut digunakan. Tailwind CDN tetap aktif; migrasi Tailwind CLI ditunda sampai build dan visual regression dapat diverifikasi. Kompromi pada CDN tetap dapat memengaruhi aplikasi. Periksa dependency sebelum memperbarui versinya; lihat juga [`ROADMAP.md`](ROADMAP.md).
 
 ## Repository hygiene
 Jangan commit file catatan pribadi, backup ZIP, token, private key, kredensial, atau identifier Drive pribadi. Gunakan data sintetis saat testing.

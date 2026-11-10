@@ -105,6 +105,59 @@ Bug yang ditemukan lewat uji mutasi: promise `transactionDone` yang ditolak sete
 
 Perlu diketahui: `navigator.storage.persist()` sengaja **tidak** dipanggil (Firefox menampilkan dialog izin). Browser tetap boleh membersihkan IndexedDB saat penyimpanan perangkat menipis; itu aman karena cache dibangun ulang dari Drive.
 
+
+## Riwayat optimasi frontend (Tahap 1–3A)
+
+Perubahan berikut dilakukan bertahap di atas baseline v1.3.8. Perubahan ini tidak mengubah backend, format catatan, skema IndexedDB, format backup, atau protokol sinkronisasi cloud.
+
+### Tahap 1 — Preview, cache, dan editor metrics
+
+- Preview pada Grid/List dibatasi panjangnya (Grid 400 karakter, List 200 karakter) dengan tetap mempertahankan konteks pencarian.
+- Cache hasil pemrosesan preview menggunakan `Map` dengan key `String(note.id)`; validasi menggunakan versi/panjang konten dan metadata lowercase.
+- Pengukuran metrik editor menggunakan debounce 250 ms dan menampilkan teks melalui `textContent`.
+- Verifikasi: pemeriksaan sintaks, 5 assertion preview, dan 11/11 pemeriksaan statis lulus.
+- Belum dilakukan: profiling browser dan pemeriksaan visual pada perangkat mobile nyata.
+
+### Tahap 2.4 — Bounded rendering
+
+- Daftar catatan dirender bertahap: batch awal 60 kartu, tombol **Muat lebih banyak** menambahkan hingga 60 kartu berikutnya.
+- Pagination direset ketika filter, kategori, tag, pencarian, preset tanggal, atau urutan ID hasil filter berubah.
+- Jumlah hasil tetap dihitung dari seluruh hasil filter. Bulk selection tetap mencakup seluruh catatan yang cocok, bukan hanya kartu yang sedang dirender.
+- Catatan pinned dan reguler berbagi batas batch awal yang sama.
+- Verifikasi: bagian dari 10/10 pemeriksaan statis Tahap 2 lulus. Pengukuran waktu render di browser belum dilakukan.
+
+### Tahap 2.5 — Sidebar separation
+
+- Rendering sidebar dipisahkan melalui `renderSidebarIfNeeded()`.
+- Sidebar hanya dibangun ulang ketika referensi array notes/categories atau kategori/tag aktif berubah.
+- Perubahan array pada beberapa jalur diperbarui menjadi immutable replacement agar perubahan referensi dapat dideteksi.
+- Ketikan pencarian dan pagination tidak lagi memicu pembangunan ulang sidebar.
+- Verifikasi: pemeriksaan statis Tahap 2 lulus; profiling browser belum dilakukan.
+
+### Tahap 2.6 — Sync comparison
+
+- `syncToBackend()` menggunakan pemeriksaan referensi terlebih dahulu (`notes.slice()`), lalu JSON comparison hanya bila referensi notes berubah.
+- Snapshot `lastObservedNotes` dibuat secara shallow.
+- Jalur mutasi note diaudit; tidak ditemukan assignment langsung ke properti objek note pada jalur yang diperiksa.
+- Mutasi metadata `pendingOperations` tetap terpisah dan tidak mengubah objek note.
+- Verifikasi: pemeriksaan statis Tahap 2 lulus. Pengujian sinkronisasi dua tab dan profiling runtime belum dilakukan.
+
+### Tahap 3A — JSZip lazy load
+
+- Pemanggilan JSZip eager dihapus dari pemuatan awal halaman.
+- JSZip 3.10.1 dimuat ketika pengguna menjalankan Backup ZIP atau Restore/Import ZIP.
+- Loader berbagi Promise untuk mencegah injeksi script berulang; Promise yang gagal dibersihkan agar pengguna dapat mencoba lagi.
+- Alur backup dan restore menunggu library siap sebelum menggunakan JSZip.
+- CDN, versi library, validasi backup/restore, dan format arsip dipertahankan.
+- Verifikasi: pemeriksaan sintaks JavaScript inline lulus. Pemeriksaan statis terhadap loader dan alur backup/restore dilakukan; browser/network testing dan pengukuran penghematan waktu muat belum dilakukan.
+
+### Tahap 3B — Tailwind CLI (ditunda)
+
+- Audit dan scaffold pipeline Tailwind CLI telah dibuat, tetapi dependency tidak berhasil dipasang karena koneksi ke `registry.npmjs.org` gagal (`EAI_AGAIN`).
+- CSS belum berhasil dikompilasi dan belum ada visual regression test.
+- **Keputusan:** tetap gunakan Tailwind CDN. Scaffold Stage 3B tidak digabungkan ke baseline stabil.
+- Jangan menghapus CDN sebelum CSS production berhasil dibangun dan diverifikasi pada tema terang/gelap serta viewport desktop/mobile.
+
 ## Hal yang sudah baik (dipertahankan)
 
 - Antrean sinkronisasi offline dengan `opId`, backoff, pembatalan, dan penanganan konflik versi (optimistic concurrency).

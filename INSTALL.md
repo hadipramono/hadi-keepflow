@@ -4,7 +4,7 @@
 - Akun Google dan akses ke Google Apps Script.
 - Google Drive.
 - Browser modern dengan JavaScript aktif.
-- Koneksi internet untuk dependency CDN yang dipakai UI: Tailwind CSS (`cdn.tailwindcss.com`), Font Awesome 6.4.0 (`cdnjs.cloudflare.com`), dan JSZip 3.10.1 (`cdn.jsdelivr.net`).
+- Koneksi internet untuk dependency CDN yang dipakai UI: Tailwind CSS (`cdn.tailwindcss.com`), Font Awesome 6.4.0 (`cdnjs.cloudflare.com`), dan JSZip 3.10.1 (`cdn.jsdelivr.net`). JSZip dimuat secara lazy hanya saat Backup ZIP atau Restore/Import ZIP digunakan.
 
 ## Membuat project
 1. Buka https://script.google.com/ lalu buat project baru.

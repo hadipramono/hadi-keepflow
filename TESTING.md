@@ -64,7 +64,7 @@ Buka DevTools > Application > IndexedDB > `hadi_keepflow` (desktop), atau uji pe
 - [ ] iOS Safari dan Android Chrome di dalam halaman `/exec` (iframe): cache tersimpan (periksa bahwa status tidak menampilkan "Gagal memperbarui cache lokal").
 - [ ] Mode privat/penyimpanan dibatasi: aplikasi tetap berfungsi (fallback localStorage atau tanpa cache).
 - [ ] Hapus data situs lalu buka lagi: semua catatan kembali dari Drive.
-- [ ] Dua tab terbuka: ubah di tab A, muat ulang tab B; pastikan tidak ada data hilang setelah sinkronisasi (sinkronisasi antar-tab belum ada, lihat ROADMAP).
+- [ ] Dua tab terbuka: ubah di tab A dan pastikan tab B menerima invalidation serta memuat data terbaru; verifikasi penuh ada di bagian 5c. Implementasi awal tersedia, tetapi belum diverifikasi pada dua tab nyata.
 
 ## 3. Catatan dan kategori
 - [ ] Buat, ubah, pin, arsip, dan hapus catatan; file di Drive ikut berubah.
@@ -129,3 +129,41 @@ Buka DevTools > Application > IndexedDB > `hadi_keepflow` (desktop), atau uji pe
 - [ ] Pada viewport mobile, preview dapat pindah ke baris berikutnya.
 - [ ] Badge kategori, tanggal, tag, dan pin tetap terlihat.
 - [ ] Uji dengan selection mode aktif dan nonaktif.
+
+
+## 8. Optimasi frontend Tahap 1–3A
+
+### Tahap 1 — Preview, cache, editor metrics
+- [ ] Preview Grid dibatasi sekitar 400 karakter dan List sekitar 200 karakter.
+- [ ] Konteks/kata pencarian tetap terlihat pada preview yang dipotong.
+- [ ] Preview diperbarui saat isi catatan berubah; cache tidak menampilkan teks lama.
+- [ ] Editor metrics diperbarui setelah debounce dan tidak menampilkan markup sebagai HTML.
+
+### Tahap 2.4 — Bounded rendering
+- [ ] Pada daftar lebih dari 60 catatan, batch awal menampilkan maksimal 60 kartu.
+- [ ] **Muat lebih banyak** menampilkan batch berikutnya hingga 60 kartu.
+- [ ] Mengubah pencarian, filter, kategori, tag, preset tanggal, atau urutan hasil mengembalikan pagination ke awal.
+- [ ] Jumlah hasil menunjukkan seluruh hasil filter, bukan hanya kartu yang dirender.
+- [ ] Bulk selection mencakup seluruh hasil filter, termasuk kartu yang belum dirender.
+- [ ] Catatan pinned dan reguler sama-sama masuk dalam batas batch awal.
+
+### Tahap 2.5 — Sidebar separation
+- [ ] Mengetik pencarian tidak membangun ulang sidebar kategori/tag.
+- [ ] Memuat batch berikutnya tidak membangun ulang sidebar.
+- [ ] Perubahan kategori, tag aktif, atau data notes/categories memperbarui sidebar dengan benar.
+
+### Tahap 2.6 — Sync comparison
+- [ ] Perubahan catatan terdeteksi dan dikirim setelah proses sinkronisasi.
+- [ ] Perubahan metadata antrean tidak menyebabkan perubahan isi note yang tidak perlu.
+- [ ] Uji edit, pin, arsip, rename kategori, restore konflik, dan pemulihan antrean untuk memastikan tidak ada mutasi note yang terlewat.
+- [ ] Uji dua tab dan offline/reconnect; pemeriksaan statis reference-first bukan pengganti uji integrasi.
+
+### Tahap 3A — JSZip lazy load
+- [ ] Membuka aplikasi tanpa menjalankan Backup/Restore tidak memuat JSZip.
+- [ ] Menjalankan Backup ZIP memuat JSZip satu kali dan menghasilkan arsip yang dapat dibuka.
+- [ ] Menjalankan Restore/Import ZIP memuat JSZip satu kali dan mempertahankan validasi/pratinjau yang ada.
+- [ ] Memicu Backup dan Restore berdekatan tidak menyuntikkan script JSZip ganda.
+- [ ] Bila pemuatan CDN gagal, pengguna mendapat kegagalan yang jelas dan percobaan berikutnya dapat mencoba memuat ulang library.
+- [ ] Uji ketika offline: fitur ZIP gagal secara terkendali; fitur catatan lain tetap dapat digunakan sesuai perilaku aplikasi.
+
+Catatan: pemeriksaan ini belum dianggap lulus hanya karena pemeriksaan sintaks atau statis. Centang setelah diuji pada browser/deployment yang digunakan.

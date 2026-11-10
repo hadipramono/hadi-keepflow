@@ -1,5 +1,41 @@
 # Changelog
 
+## Optimasi frontend — Tahap 1 sampai 3A (belum menjadi rilis versi baru)
+
+### Tahap 1 — Preview, cache, dan editor metrics
+- Preview Grid/List dibatasi masing-masing 400/200 karakter dengan konteks pencarian.
+- Cache preview berbasis `Map`, divalidasi dengan identitas catatan, versi/panjang konten, dan metadata lowercase.
+- Editor metrics memakai debounce 250 ms dan menampilkan teks melalui `textContent`.
+- Verifikasi: sintaks, 5 assertion preview, dan 11/11 pemeriksaan statis lulus. Profiling browser dan uji visual mobile belum dilakukan.
+
+### Tahap 2.4 — Bounded rendering
+- Daftar catatan dirender dalam batch 60 kartu dengan tombol **Muat lebih banyak** untuk batch berikutnya.
+- Pagination direset saat kriteria/urutan hasil filter berubah.
+- Total hasil dan bulk selection tetap mencakup seluruh hasil filter, termasuk kartu yang belum dirender.
+
+### Tahap 2.5 — Sidebar separation
+- Memisahkan pembaruan sidebar dari render daftar utama.
+- Sidebar hanya dibangun ulang saat data notes/categories atau pilihan kategori/tag berubah.
+- Search keystrokes dan pagination tidak lagi membangun ulang sidebar.
+
+### Tahap 2.6 — Sync comparison
+- `syncToBackend()` memakai reference-first comparison; JSON comparison hanya dilakukan bila referensi array notes berubah.
+- Snapshot `lastObservedNotes` dibuat secara shallow.
+- Jalur mutasi note diperiksa untuk memastikan pendekatan berbasis referensi tidak melewatkan perubahan.
+
+### Tahap 3A — JSZip lazy load
+- JSZip 3.10.1 tidak lagi dimuat saat halaman pertama kali dibuka.
+- Library dimuat hanya ketika Backup ZIP atau Restore/Import ZIP digunakan.
+- Loader memakai Promise bersama untuk mencegah pemuatan ganda dan memungkinkan retry setelah gagal.
+- Format ZIP, validasi, dan alur backup/restore dipertahankan.
+
+### Verifikasi dan batasan
+- Tahap 2: pemeriksaan statis 10/10 lulus; browser runtime, timing render, dan sinkronisasi dua tab belum diuji.
+- Tahap 3A: pemeriksaan sintaks JavaScript inline lulus; browser/network testing dan pengukuran waktu muat belum dilakukan.
+- Tahap 3B Tailwind CLI **ditunda**. Tailwind CDN tetap digunakan karena dependency npm tidak berhasil diakses dan CSS hasil build/visual regression belum diverifikasi.
+- Perubahan ini tidak menaikkan versi aplikasi; baseline versi tetap v1.3.8 sampai keputusan rilis terpisah.
+
+
 ## Perbaikan berikutnya — List View text overlap (belum dirilis)
 
 ### UI/UX
