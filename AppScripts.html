@@ -3606,9 +3606,32 @@
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
+    let jsZipLoadPromise = null;
+
+    function loadJSZip() {
+      if (window.JSZip) return Promise.resolve(window.JSZip);
+      if (jsZipLoadPromise) return jsZipLoadPromise;
+
+      jsZipLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+        script.async = true;
+        script.onload = () => {
+          if (window.JSZip) resolve(window.JSZip);
+          else reject(new Error('Library ZIP berhasil dimuat tetapi tidak tersedia.'));
+        };
+        script.onerror = () => reject(new Error('Gagal memuat library ZIP. Periksa koneksi internet lalu coba lagi.'));
+        document.head.appendChild(script);
+      }).catch(error => {
+        jsZipLoadPromise = null;
+        throw error;
+      });
+
+      return jsZipLoadPromise;
+    }
+
     function ensureBackupReady() {
       if (!navigator.onLine) throw new Error('Backup dan restore memerlukan koneksi internet.');
-      if (typeof JSZip === 'undefined') throw new Error('Library ZIP belum termuat. Muat ulang aplikasi dan coba lagi.');
       if (syncRunning || cloudLoadInProgress || pendingOperations.length > 0 || pendingCategoryCreates.length > 0) {
         throw new Error('Masih ada proses sinkronisasi atau antrean tertunda. Tunggu sampai status tersinkron, lalu coba lagi.');
       }
@@ -3674,6 +3697,7 @@
       const button = document.getElementById('backup-zip-btn');
       try {
         ensureBackupReady();
+        await loadJSZip();
         button.disabled = true;
         button.classList.add('opacity-50');
         showDataProgress('Membuat Backup ZIP', 'Mengambil data dari Google Drive', 'Mengambil snapshot catatan dan kategori...', 3, true);
@@ -3944,6 +3968,7 @@
       input.disabled = true;
       try {
         ensureBackupReady();
+        await loadJSZip();
         showDataProgress('Restore / Import ZIP', 'Memeriksa arsip', 'Membaca file ZIP dan memvalidasi isinya...', 5, true);
         setSyncStatus('Memeriksa arsip ZIP...', 'fa-circle-notch fa-spin', 'text-blue-500');
         const preview = await inspectKeepFlowZip(file);
