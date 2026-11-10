@@ -22,7 +22,7 @@
     let sortMode = 'updated_desc';
     let selectionMode = false;
     const selectedNoteIds = new Set();
-    const plainTextCache = new WeakMap();
+    const plainTextCache = new Map();
     const DRAFT_KEY = 'hadi_keepflow_editor_draft_v1';
     const DRAFT_AUTOSAVE_MS = 650;
     let draftSaveTimer = null;
@@ -335,6 +335,15 @@
       });
     }
 
+    let editorMetricsTimer = null;
+    function scheduleEditorMetrics() {
+      if (editorMetricsTimer) clearTimeout(editorMetricsTimer);
+      editorMetricsTimer = setTimeout(() => {
+        editorMetricsTimer = null;
+        updateEditorMetrics();
+      }, 250);
+    }
+
     function updateEditorMetrics() {
       const editor = document.getElementById('editor-content-editable');
       const wordNode = document.getElementById('editor-word-count');
@@ -342,7 +351,7 @@
       const taskNode = document.getElementById('editor-task-count');
       if (!editor || !wordNode || !charNode) return;
       labelEditorCheckboxes(editor);
-      const text = String(editor.innerText || editor.textContent || '').replace(/\u00a0/g, ' ').trim();
+      const text = String(editor.textContent || '').replace(/\u00a0/g, ' ').trim();
       const words = text ? text.split(/\s+/u).filter(Boolean).length : 0;
       const tasks = [...editor.querySelectorAll('input[type="checkbox"]')];
       const completedTasks = tasks.filter(task => task.checked).length;
@@ -429,7 +438,7 @@
     const editableArea = document.getElementById('editor-content-editable');
     if (editableArea) {
       editableArea.addEventListener('mouseup', () => { captureEditorSelection(); updateToolbarState(); });
-      editableArea.addEventListener('keyup', () => { captureEditorSelection(); updateToolbarState(); updateEditorMetrics(); });
+      editableArea.addEventListener('keyup', () => { captureEditorSelection(); updateToolbarState(); scheduleEditorMetrics(); });
       // Activate the composer on pointer interaction as well as focus. Native
       // checklist inputs inside contenteditable can receive focus themselves,
       // so relying on the contenteditable focus event alone hides the dock.
@@ -462,7 +471,7 @@
       });
       editableArea.addEventListener('input', () => {
         setEditorContentActive(true);
-        updateEditorMetrics();
+        scheduleEditorMetrics();
         syncEditorVisualViewport();
       });
       editableArea.addEventListener('change', event => {
@@ -2219,23 +2228,53 @@
       return out.replace(/\u00a0/g, ' ').replace(/([\u2610\u2611])[ \t]+/g, '$1 ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     }
 
-    function getPlainText(note) {
-      if (!note || typeof note !== 'object') return '';
-      const source = typeof note.content === 'string' ? note.content : '';
-      const cached = plainTextCache.get(note);
-      if (cached && cached.source === source) return cached.text;
-
-      const text = htmlToPlainText(source);
-      plainTextCache.set(note, { source, text, lower: text.toLowerCase() });
-      return text;
+    function getNoteCacheVersion(note, content) {
+      const version = note.updatedAt || note.baseUpdatedAt || note.createdAt || '';
+      return String(version) + ':' + content.length;
     }
 
     function getSearchableText(note) {
-      const source = typeof note.content === 'string' ? note.content : '';
-      const cached = plainTextCache.get(note);
-      if (cached && cached.source === source) return cached;
-      getPlainText(note);
-      return plainTextCache.get(note);
+      if (!note || typeof note !== 'object') {
+        return { text: '', lower: '', titleLower: '', categoryLower: '', tagsLower: '' };
+      }
+
+      const id = String(note.id == null ? '' : note.id);
+      const content = typeof note.content === 'string' ? note.content : '';
+      const version = getNoteCacheVersion(note, content);
+      const titleLower = String(note.title || '').toLocaleLowerCase();
+      const categoryLower = normalizeNoteCategory(note.category).toLocaleLowerCase();
+      const tagsLower = (Array.isArray(note.tags) ? note.tags : []).join(' ').toLocaleLowerCase();
+      const cached = id ? plainTextCache.get(id) : null;
+      if (cached && cached.version === version &&
+          cached.titleLower === titleLower &&
+          cached.categoryLower === categoryLower &&
+          cached.tagsLower === tagsLower) return cached;
+
+      const text = htmlToPlainText(content);
+      const entry = {
+        version,
+        contentLength: content.length,
+        text,
+        lower: text.toLocaleLowerCase(),
+        titleLower,
+        categoryLower,
+        tagsLower
+      };
+      if (id) plainTextCache.set(id, entry);
+      return entry;
+    }
+
+    function getPlainText(note) {
+      return getSearchableText(note).text;
+    }
+
+    function prunePlainTextCache(activeNotes = notes) {
+      const activeIds = new Set((Array.isArray(activeNotes) ? activeNotes : [])
+        .filter(note => note && note.id != null)
+        .map(note => String(note.id)));
+      for (const id of plainTextCache.keys()) {
+        if (!activeIds.has(id)) plainTextCache.delete(id);
+      }
     }
 
     function matchesDateFilter(noteDateStr) {
@@ -2280,11 +2319,8 @@
     }
 
     function noteSearchHaystack(note) {
-      const title = String(note.title || '').toLocaleLowerCase();
-      const content = getSearchableText(note).lower;
-      const category = normalizeNoteCategory(note.category).toLocaleLowerCase();
-      const tags = (Array.isArray(note.tags) ? note.tags : []).join(' ').toLocaleLowerCase();
-      return [title, content, category, tags].join(' ');
+      const cached = getSearchableText(note);
+      return [cached.titleLower, cached.lower, cached.categoryLower, cached.tagsLower].join(' ');
     }
 
     function noteMatchesSearch(note, terms) {
@@ -2520,6 +2556,7 @@
     }
 
     function render() {
+      prunePlainTextCache();
       const dashboardVisible = activeSection === 'dashboard';
       document.getElementById('dashboard-view').classList.toggle('hidden', !dashboardVisible);
       document.getElementById('notes-view-content').classList.toggle('hidden', dashboardVisible);
@@ -2714,6 +2751,43 @@
       `).join('');
     }
 
+    function getPreviewExcerpt(text, query, maxLength) {
+      const raw = String(text || '');
+      const limit = Math.max(1, Number(maxLength) || 200);
+      if (raw.length <= limit) return raw;
+
+      const terms = getSearchTerms(query);
+      let matchIndex = -1;
+      let matchLength = 0;
+      for (const term of terms) {
+        const index = raw.toLocaleLowerCase().indexOf(term.toLocaleLowerCase());
+        if (index !== -1 && (matchIndex === -1 || index < matchIndex)) {
+          matchIndex = index;
+          matchLength = term.length;
+        }
+      }
+
+      if (matchIndex === -1) return raw.slice(0, limit).trimEnd() + '…';
+
+      const contextBefore = Math.floor((limit - matchLength) * 0.35);
+      let start = Math.max(0, matchIndex - contextBefore);
+      let end = Math.min(raw.length, start + limit);
+      if (end - start < limit) start = Math.max(0, end - limit);
+
+      // Prefer word boundaries without losing the actual search match.
+      if (start > 0) {
+        const boundary = raw.indexOf(' ', start);
+        if (boundary !== -1 && boundary < matchIndex) start = boundary + 1;
+      }
+      if (end < raw.length) {
+        const boundary = raw.lastIndexOf(' ', end);
+        if (boundary > matchIndex) end = boundary;
+      }
+
+      const excerpt = raw.slice(start, end).trim();
+      return (start > 0 ? '…' : '') + excerpt + (end < raw.length ? '…' : '');
+    }
+
     function createCardHTML(note) {
       const plainContent = getPlainText(note);
       const safeId = escapeHTML(String(note.id == null ? '' : note.id));
@@ -2739,7 +2813,7 @@
             <div class="mail-list-content">
               <div class="mail-list-primary">
                 <span class="card-list-title mail-list-title">${highlightSearchText(listTitle, searchQuery)}</span>
-                <span class="card-list-preview mail-list-preview">${plainContent ? highlightSearchText(plainContent, searchQuery) : '<span class="mail-list-empty">Catatan kosong</span>'}</span>
+                <span class="card-list-preview mail-list-preview">${plainContent ? highlightSearchText(getPreviewExcerpt(plainContent, searchQuery, 200), searchQuery) : '<span class="mail-list-empty">Catatan kosong</span>'}</span>
               </div>
               <div class="mail-list-secondary">
                 <span class="mail-list-mobile-category">${escapeHTML(getCategoryDisplayName(note.category))}</span>
@@ -2760,7 +2834,7 @@
                 ${note.isArchived ? '<span class="text-[10px] bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded">Arsip</span>' : ''}
               </div>
               ${note.title ? `<h3 class="font-bold text-gray-900 dark:text-white mb-2 text-base">${highlightSearchText(note.title, searchQuery)}</h3>` : ''}
-              <p class="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap line-clamp-6 mb-3">${highlightSearchText(plainContent, searchQuery)}</p>
+              <p class="text-gray-600 dark:text-gray-300 text-sm whitespace-pre-wrap line-clamp-6 mb-3">${highlightSearchText(getPreviewExcerpt(plainContent, searchQuery, 400), searchQuery)}</p>
             </div>
             
             <div>
@@ -3108,6 +3182,11 @@
     let editorReturnFocus = null;
 
     function closeEditorModal() {
+      if (editorMetricsTimer) {
+        clearTimeout(editorMetricsTimer);
+        editorMetricsTimer = null;
+      }
+      updateEditorMetrics();
       editorModal.classList.add('hidden');
       editorModal.classList.remove('editor-content-active', 'editor-formatting-mode');
       editorModal.style.removeProperty('--keepflow-visual-height');
