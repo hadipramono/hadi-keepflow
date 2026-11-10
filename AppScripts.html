@@ -2719,22 +2719,35 @@
       const safeId = escapeHTML(String(note.id == null ? '' : note.id));
 
       if (isListView) {
+        const listTitle = note.title || 'Tanpa Judul';
+        const listTags = (note.tags || []).slice(0, 3).map(tag =>
+          `<span class="mail-list-tag">${escapeHTML(tag)}</span>`
+        ).join('');
+        const extraTags = (note.tags || []).length > 3
+          ? `<span class="mail-list-tag mail-list-tag-more">+${(note.tags || []).length - 3}</span>` : '';
         return `
-          <div data-id="${safeId}" role="${selectionMode ? 'group' : 'button'}" ${selectionMode ? '' : 'tabindex="0"'} aria-label="${selectionMode ? 'Pilih catatan ' : 'Buka catatan '}${escapeHTML(note.title || 'Tanpa Judul')}" class="masonry-item card-item bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow transition cursor-pointer flex items-center justify-between gap-4 group">
-            ${selectionMode ? `<input type="checkbox" data-note-id="${safeId}" class="note-select-checkbox h-4 w-4 shrink-0 accent-blue-600" aria-label="Pilih catatan ${escapeHTML(note.title || 'Tanpa Judul')}">` : ''}
-            <div class="card-list-main flex items-center space-x-3 truncate flex-1 min-w-0">
-              <span class="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded text-[10px] font-medium shrink-0"><i class="fa-solid ${isInboxNote(note) ? 'fa-inbox' : 'fa-folder'} mr-1"></i>${escapeHTML(getCategoryDisplayName(note.category))}</span>
-              <span class="card-list-title font-bold text-gray-900 dark:text-white text-sm">${highlightSearchText(note.title || 'Tanpa Judul', searchQuery)}</span>
-              <span class="card-list-preview text-gray-500 dark:text-gray-400 text-xs">- ${highlightSearchText(plainContent, searchQuery)}</span>
+          <div data-id="${safeId}" role="${selectionMode ? 'group' : 'button'}" ${selectionMode ? '' : 'tabindex="0"'} aria-label="${selectionMode ? 'Pilih catatan ' : 'Buka catatan '}${escapeHTML(listTitle)}" class="masonry-item card-item mail-list-row group">
+            <div class="mail-list-leading">
+              ${selectionMode
+                ? `<input type="checkbox" data-note-id="${safeId}" class="note-select-checkbox mail-list-checkbox accent-blue-600" aria-label="Pilih catatan ${escapeHTML(listTitle)}">`
+                : `<span class="mail-list-pin ${note.isPinned ? 'is-pinned' : ''}" aria-label="${note.isPinned ? 'Disematkan' : 'Tidak disematkan'}"><i class="fa-solid fa-thumbtack"></i></span>`}
             </div>
-            
-            <div class="card-list-meta flex items-center space-x-3 shrink-0 text-xs text-gray-400">
-              <div class="flex gap-1">
-                ${(note.tags || []).map(t => `<span class="px-1.5 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-500 rounded text-[10px]">${escapeHTML(t)}</span>`).join('')}
+            <div class="mail-list-category" title="${escapeHTML(getCategoryDisplayName(note.category))}">
+              <i class="fa-solid ${isInboxNote(note) ? 'fa-inbox' : 'fa-folder'}"></i>
+              <span>${escapeHTML(getCategoryDisplayName(note.category))}</span>
+            </div>
+            <div class="mail-list-content">
+              <div class="mail-list-primary">
+                <span class="card-list-title mail-list-title">${highlightSearchText(listTitle, searchQuery)}</span>
+                <span class="card-list-preview mail-list-preview">${plainContent ? highlightSearchText(plainContent, searchQuery) : '<span class="mail-list-empty">Catatan kosong</span>'}</span>
               </div>
-              <span>${formatDate(note.updatedAt)}</span>
-              <i class="fa-solid fa-thumbtack text-xs ${note.isPinned ? 'text-blue-500' : 'text-transparent group-hover:text-gray-300'}"></i>
+              <div class="mail-list-secondary">
+                <span class="mail-list-mobile-category">${escapeHTML(getCategoryDisplayName(note.category))}</span>
+                <div class="mail-list-tags">${listTags}${extraTags}</div>
+                ${note.isArchived ? '<span class="mail-list-archived">Arsip</span>' : ''}
+              </div>
             </div>
+            <div class="mail-list-date">${formatDate(note.updatedAt || note.createdAt)}</div>
           </div>
         `;
       } else {

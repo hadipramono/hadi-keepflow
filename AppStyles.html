@@ -29,45 +29,64 @@
     .view-list {
       display: flex;
       flex-direction: column;
-      gap: 0.5rem;
+      gap: 0;
       max-width: 100%;
+      border: 1px solid #e5e7eb;
+      border-radius: .75rem;
+      overflow: hidden;
+      background: #fff;
     }
-    .view-list .masonry-item {
-      margin-bottom: 0;
-      width: 100%;
-      padding: 0.75rem 1rem !important;
-      display: flex;
+    .dark .view-list { background: #1f2937; border-color: #374151; }
+    .view-list .mail-list-row {
+      display: grid;
+      grid-template-columns: 28px minmax(108px, 154px) minmax(0, 1fr) 88px;
       align-items: center;
-      justify-content: space-between;
-      gap: 1rem;
-    }
-    /* Keep list-view title and excerpt in separate, shrinkable flex tracks. */
-    .view-list .card-list-main {
-      flex: 1 1 auto;
+      column-gap: .75rem;
+      width: 100%;
       min-width: 0;
-      max-width: 100%;
-      overflow: hidden;
-      white-space: nowrap;
+      min-height: 58px;
+      padding: .65rem 1rem;
+      margin: 0;
+      border: 0;
+      border-bottom: 1px solid #e5e7eb;
+      border-radius: 0;
+      background: #fff;
+      box-shadow: none;
+      cursor: pointer;
+      transition: background-color .15s ease, box-shadow .15s ease;
     }
-    .view-list .card-list-title {
-      display: block;
-      flex: 0 1 34%;
-      width: 34%;
-      min-width: 5rem;
-      max-width: 34%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .view-list .card-list-preview {
-      display: block;
-      flex: 1 1 0;
-      width: 0;
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+    .dark .view-list .mail-list-row { background: #1f2937; border-bottom-color: #374151; }
+    .view-list .mail-list-row:last-child { border-bottom: 0; }
+    .view-list .mail-list-row:hover { background: #f8fafc; box-shadow: inset 0 1px 0 #e5e7eb, inset 0 -1px 0 #e5e7eb; }
+    .dark .view-list .mail-list-row:hover { background: #273449; box-shadow: inset 0 1px 0 #475569, inset 0 -1px 0 #475569; }
+    .view-list .mail-list-row.note-selected { background: #eff6ff; box-shadow: inset 3px 0 #3b82f6; }
+    .dark .view-list .mail-list-row.note-selected { background: #1e3a5f; }
+    .mail-list-leading { display: flex; align-items: center; justify-content: center; min-width: 0; }
+    .mail-list-checkbox { width: 16px; height: 16px; cursor: pointer; }
+    .mail-list-pin { color: #cbd5e1; font-size: .75rem; opacity: 0; transition: opacity .15s ease, color .15s ease; }
+    .mail-list-row:hover .mail-list-pin, .mail-list-pin.is-pinned { opacity: 1; }
+    .mail-list-pin.is-pinned { color: #3b82f6; }
+    .mail-list-category { display: flex; align-items: center; gap: .45rem; min-width: 0; color: #64748b; font-size: .75rem; }
+    .mail-list-category i { flex: 0 0 auto; color: #60a5fa; font-size: .7rem; }
+    .mail-list-category span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dark .mail-list-category { color: #cbd5e1; }
+    .mail-list-content { min-width: 0; overflow: hidden; }
+    .mail-list-primary { display: flex; align-items: baseline; gap: .55rem; min-width: 0; line-height: 1.45; }
+    .view-list .mail-list-title { flex: 0 1 auto; min-width: 5rem; max-width: 42%; overflow: hidden; color: #1f2937; font-size: .875rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+    .dark .view-list .mail-list-title { color: #f3f4f6; }
+    .view-list .mail-list-preview { flex: 1 1 0; min-width: 0; overflow: hidden; color: #64748b; font-size: .8rem; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+    .dark .view-list .mail-list-preview { color: #9ca3af; }
+    .mail-list-empty { color: #9ca3af; font-style: italic; }
+    .mail-list-secondary { display: flex; align-items: center; gap: .5rem; min-width: 0; margin-top: .25rem; }
+    .mail-list-mobile-category { display: none; }
+    .mail-list-tags { display: flex; align-items: center; gap: .3rem; min-width: 0; overflow: hidden; }
+    .mail-list-tag { display: inline-block; max-width: 120px; overflow: hidden; padding: .08rem .4rem; border-radius: .25rem; background: #f1f5f9; color: #64748b; font-size: .65rem; text-overflow: ellipsis; white-space: nowrap; }
+    .dark .mail-list-tag { background: #374151; color: #cbd5e1; }
+    .mail-list-tag-more { background: transparent; }
+    .mail-list-archived { flex: 0 0 auto; padding: .08rem .4rem; border-radius: .25rem; background: #f1f5f9; color: #64748b; font-size: .65rem; }
+    .mail-list-date { align-self: start; padding-top: .12rem; color: #64748b; font-size: .72rem; font-weight: 500; text-align: right; white-space: nowrap; }
+    .dark .mail-list-date { color: #9ca3af; }
+    .view-list .mail-list-row:focus-visible { position: relative; z-index: 1; outline: 2px solid #3b82f6; outline-offset: -2px; }
 
     .custom-scrollbar::-webkit-scrollbar {
       width: 6px;
@@ -456,14 +475,18 @@
     #bulk-actions-bar button:disabled { opacity: .45; cursor: not-allowed; }
 
     @media (max-width: 767px) {
-      .view-list .masonry-item { flex-wrap: wrap; align-items: flex-start; gap: .5rem; }
-      .view-list .card-list-main { flex: 1 1 calc(100% - 2.5rem); min-width: 0; flex-wrap: wrap; white-space: normal; overflow: visible; }
-      .view-list .card-list-title { flex: 0 1 55%; width: auto; max-width: 55%; min-width: 0; }
-      .view-list .card-list-preview { flex: 1 1 100%; width: 100%; min-width: 0; }
-      .view-list .card-list-meta { flex: 1 1 100%; width: 100%; max-width: 100%; margin-left: auto; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
-      .view-list .card-list-meta > div:first-child { min-width: 0; flex-wrap: wrap; }
-      .view-list .card-list-meta > div:first-child > span { overflow-wrap: anywhere; }
-      .view-list .card-list-meta > span { white-space: nowrap; }
+      .view-list .mail-list-row { grid-template-columns: 24px minmax(0, 1fr) auto; column-gap: .55rem; min-height: 66px; padding: .7rem .75rem; }
+      .view-list .mail-list-category { display: none; }
+      .view-list .mail-list-content { grid-column: 2; grid-row: 1; }
+      .view-list .mail-list-mobile-category { display: inline-block; flex: 0 0 auto; max-width: 40%; overflow: hidden; padding: .08rem .35rem; border-radius: .25rem; background: #eff6ff; color: #2563eb; font-size: .64rem; text-overflow: ellipsis; white-space: nowrap; }
+      .dark .view-list .mail-list-mobile-category { background: #1e3a5f; color: #93c5fd; }
+      .view-list .mail-list-date { grid-column: 3; grid-row: 1; font-size: .68rem; }
+      .view-list .mail-list-primary { gap: .35rem; }
+      .view-list .mail-list-title { max-width: 48%; min-width: 0; font-size: .82rem; }
+      .view-list .mail-list-preview { font-size: .73rem; }
+      .view-list .mail-list-secondary { margin-top: .18rem; }
+      .view-list .mail-list-category i { display: none; }
+      .view-list .mail-list-category span { max-width: 100%; }
       .note-select-checkbox { width: 24px !important; height: 24px !important; }
       .category-row { gap: .25rem; padding-left: .5rem; padding-right: .25rem; }
       .category-management-actions { gap: 0; }
