@@ -1088,14 +1088,16 @@
     // If the cache lost a note that still has an unsynced save in the queue,
     // restore it from the queue so it stays visible before the next sync.
     function repairNotesFromQueue() {
-      const positions = new Map(notes.map((note, index) => [String(note.id), index]));
+      const repaired = notes.slice();
+      const positions = new Map(repaired.map((note, index) => [String(note.id), index]));
       pendingOperations.forEach(op => {
         if (!op || op.type !== 'save' || !op.note || typeof op.note !== 'object') return;
         const id = String(op.id);
         const queuedNote = normalizeNoteRecord({ ...cloneData(op.note), id });
-        if (positions.has(id)) notes[positions.get(id)] = queuedNote;
-        else { positions.set(id, notes.length); notes.push(queuedNote); }
+        if (positions.has(id)) repaired[positions.get(id)] = queuedNote;
+        else { positions.set(id, repaired.length); repaired.push(queuedNote); }
       });
+      notes = repaired;
     }
 
     function persistLocal(announceCrossTab = true) {
@@ -1329,7 +1331,7 @@
         pendingOperations = pendingOperations.filter(op => String(op.id) !== id);
         if (currentNote) {
           notes = notes.map(note => String(note.id) === id ? currentNote : note);
-          if (!notes.some(note => String(note.id) === id)) notes.push(currentNote);
+          if (!notes.some(note => String(note.id) === id)) notes = [...notes, currentNote];
           lastObservedNotes = lastObservedNotes.map(note => String(note.id) === id ? currentNote : note);
           if (!lastObservedNotes.some(note => String(note.id) === id)) lastObservedNotes.push(currentNote);
         } else {
@@ -1561,7 +1563,7 @@
       // Capture local state before the request. Any edits/deletes made while
       // the request is pending are recorded in the durable queue by
       // syncToBackend() and are applied over the returned cloud baseline.
-      lastObservedNotes = cloneData(notes);
+      lastObservedNotes = notes.slice();
       render();
       hideLoader();
 
@@ -1611,7 +1613,7 @@
 
         // Do not treat the server response as a user edit. Pending operations
         // remain the authoritative record of local changes until acknowledged.
-        lastObservedNotes = cloneData(notes);
+        lastObservedNotes = notes.slice();
         persistLocal(!crossTabRefreshInProgress);
         crossTabRefreshInProgress = false;
         render();
@@ -1670,13 +1672,21 @@
     // It records deltas against the last observed UI snapshot, even while the
     // initial cloud request is still loading. The queue itself is durable.
     function syncToBackend() {
-      const current = cloneData(notes);
+      // Notes are updated immutably throughout the UI. Keep a shallow snapshot
+      // so unchanged records retain identity and avoid clone/serialize work.
+      const current = notes.slice();
       const currentMap = new Map(current.map(note => [String(note.id), note]));
       const previousMap = new Map(lastObservedNotes.map(note => [String(note.id), note]));
 
       current.forEach(note => {
         const old = previousMap.get(String(note.id));
-        if (!old || JSON.stringify(old) !== JSON.stringify(note)) {
+        if (!old) {
+          enqueueOperation('save', note);
+          return;
+        }
+        // Same reference means the record is unchanged. Only serialize when
+        // identity changed, preserving a value check as a defensive fallback.
+        if (old !== note && JSON.stringify(old) !== JSON.stringify(note)) {
           enqueueOperation('save', note);
         }
       });
@@ -2151,7 +2161,7 @@
               item.toLocaleLowerCase() === oldCat.toLocaleLowerCase() ? renamed : item
             );
             if (!categories.some(item => item.toLocaleLowerCase() === renamed.toLocaleLowerCase())) {
-              categories.push(renamed);
+              categories = [...categories, renamed];
             }
             if (currentCategory && currentCategory.toLocaleLowerCase() === oldCat.toLocaleLowerCase()) {
               currentCategory = renamed;
@@ -2555,6 +2565,36 @@
       document.getElementById('recent-search-panel').classList.add('hidden');
     }
 
+    const NOTES_RENDER_BATCH_SIZE = 60;
+    let renderedNotesLimit = NOTES_RENDER_BATCH_SIZE;
+    let paginationSignature = '';
+    let loadMoreButton = document.createElement('button');
+    loadMoreButton.type = 'button';
+    loadMoreButton.id = 'load-more-notes';
+    loadMoreButton.className = 'hidden mx-auto my-6 px-5 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500';
+    loadMoreButton.textContent = 'Muat lebih banyak';
+    notesGrid.insertAdjacentElement('afterend', loadMoreButton);
+    loadMoreButton.addEventListener('click', () => {
+      renderedNotesLimit += NOTES_RENDER_BATCH_SIZE;
+      render();
+    });
+
+    let sidebarNotesReference = null;
+    let sidebarCategoriesReference = null;
+    let sidebarActiveState = '';
+    function renderSidebarIfNeeded() {
+      const activeState = [currentCategory || '', currentTag || ''].join('::');
+      if (sidebarNotesReference === notes &&
+          sidebarCategoriesReference === categories &&
+          sidebarActiveState === activeState) return;
+      renderInboxCount();
+      renderCategories();
+      renderTags();
+      sidebarNotesReference = notes;
+      sidebarCategoriesReference = categories;
+      sidebarActiveState = activeState;
+    }
+
     function render() {
       prunePlainTextCache();
       const dashboardVisible = activeSection === 'dashboard';
@@ -2579,36 +2619,61 @@
       notesGrid.className = isListView ? 'view-list' : 'view-grid';
       pinnedGrid.className = isListView ? 'view-list' : 'view-grid';
       
+      const nextPaginationSignature = JSON.stringify([
+        currentFilter, currentCategory || '', currentTag || '', searchQuery || '', datePreset,
+        filtered.map(note => String(note.id))
+      ]);
+      if (nextPaginationSignature !== paginationSignature) {
+        paginationSignature = nextPaginationSignature;
+        renderedNotesLimit = NOTES_RENDER_BATCH_SIZE;
+      }
+
+      let renderedCount = 0;
       if (currentFilter === 'pinned' || currentFilter === 'inbox') {
         // Dedicated views show all matching notes without All Notes pin grouping.
         pinnedSection.classList.add('hidden');
         othersTitle.classList.add('hidden');
-        notesGrid.innerHTML = filtered.map(createCardHTML).join('');
+        const visible = filtered.slice(0, renderedNotesLimit);
+        renderedCount = visible.length;
+        notesGrid.innerHTML = visible.map(createCardHTML).join('');
+        pinnedGrid.innerHTML = '';
       } else if (currentCategory || currentTag) {
-        // Category/tag views must include BOTH pinned and regular notes.
-        // Pinning only changes grouping in the All Notes view; it must not
-        // hide a note from its category or tag.
+        // Category/tag views include both pinned and regular notes.
         pinnedSection.classList.add('hidden');
         othersTitle.classList.add('hidden');
-        notesGrid.innerHTML = filtered.map(createCardHTML).join('');
+        const visible = filtered.slice(0, renderedNotesLimit);
+        renderedCount = visible.length;
+        notesGrid.innerHTML = visible.map(createCardHTML).join('');
+        pinnedGrid.innerHTML = '';
       } else {
         const pinned = filtered.filter(n => n.isPinned && currentFilter !== 'archive');
         const others = filtered.filter(n => !n.isPinned || currentFilter === 'archive');
+        const visiblePinned = pinned.slice(0, renderedNotesLimit);
+        const remainingLimit = Math.max(0, renderedNotesLimit - visiblePinned.length);
+        const visibleOthers = others.slice(0, remainingLimit);
+        renderedCount = visiblePinned.length + visibleOthers.length;
 
-        if (pinned.length > 0 && currentFilter === 'all') {
+        if (visiblePinned.length > 0 && currentFilter === 'all') {
           pinnedSection.classList.remove('hidden');
           othersTitle.classList.remove('hidden');
-          pinnedGrid.innerHTML = pinned.map(createCardHTML).join('');
+          pinnedGrid.innerHTML = visiblePinned.map(createCardHTML).join('');
         } else {
           pinnedSection.classList.add('hidden');
           othersTitle.classList.add('hidden');
+          pinnedGrid.innerHTML = '';
         }
-        notesGrid.innerHTML = others.map(createCardHTML).join('');
+        notesGrid.innerHTML = visibleOthers.map(createCardHTML).join('');
       }
 
-      renderInboxCount();
-      renderCategories();
-      renderTags();
+      const remainingCount = Math.max(0, filtered.length - renderedCount);
+      loadMoreButton.classList.toggle('hidden', remainingCount === 0);
+      loadMoreButton.textContent = remainingCount
+        ? `Muat lebih banyak (${Math.min(NOTES_RENDER_BATCH_SIZE, remainingCount)} dari ${remainingCount} tersisa)`
+        : 'Semua catatan ditampilkan';
+
+      // Sidebar is independent from list rendering. Search keystrokes and
+      // pagination do not rebuild category/tag navigation.
+      renderSidebarIfNeeded();
       renderBulkActions(filtered);
     }
 
@@ -3940,7 +4005,7 @@
         const byId = new Map(notes.map(note => [String(note.id), note]));
         importedNotes.forEach(note => byId.set(String(note.id), note));
         notes = [...byId.values()];
-        lastObservedNotes = cloneData(notes);
+        lastObservedNotes = notes.slice();
         persistLocal();
         reconcileCloudCategories(await callKeepFlowServer('getCategories'));
         render();
